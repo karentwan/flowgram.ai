@@ -1,0 +1,48 @@
+{
+  "name": "@flowgram.ai/flow-backend",
+  "version": "0.1.0",
+  "description": "Flowgram workflow studio backend: workflow CRUD + auth + runtime execution proxy",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "node --import tsx/esm --env-file=.env src/index.ts",
+    "build": "tsup src/index.ts --format esm --sourcemap --legacy-output --dts-resolve",
+    "lint": "eslint ./src --cache",
+    "lint:fix": "eslint ./src --fix",
+    "ts-check": "tsc --noEmit",
+    "test": "exit 0",
+    "test:cov": "exit 0",
+    "clean": "rimraf dist",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "seed": "tsx --env-file=.env src/scripts/seed.ts"
+  },
+  "dependencies": {
+    "@flowgram.ai/runtime-interface": "workspace:*",
+    "@flowgram.ai/runtime-nodejs": "workspace:*",
+    "@fastify/cors": "^8.2.1",
+    "@prisma/client": "^5.22.0",
+    "@trpc/server": "^10.27.1",
+    "fastify": "^4.17.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@flowgram.ai/ts-config": "workspace:*",
+    "@flowgram.ai/eslint-config": "workspace:*",
+    "@types/node": "^18",
+    "eslint": "^9.0.0",
+    "prisma": "^5.22.0",
+    "rimraf": "^5.0.5",
+    "tsup": "^8.0.1",
+    "tsx": "~4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

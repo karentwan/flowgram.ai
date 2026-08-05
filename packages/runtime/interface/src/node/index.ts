@@ -10,6 +10,8 @@ export { StartNodeSchema } from './start';
 export { LoopNodeSchema } from './loop';
 export { ConditionNodeSchema, ConditionOperator, ConditionItem } from './condition';
 export { HTTPNodeSchema, HTTPMethod, HTTPBodyType } from './http';
+export { MCPNodeSchema } from './mcp';
+export { AgentNodeSchema } from './agent';
 export { CodeNodeSchema } from './code';
 export { BreakNodeSchema } from './break';
 export { ContinueNodeSchema } from './continue';

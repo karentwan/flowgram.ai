@@ -16,6 +16,8 @@ export enum FlowGramNode {
   BlockStart = 'block-start',
   BlockEnd = 'block-end',
   HTTP = 'http',
+  MCP = 'mcp',
+  Agent = 'agent',
   Break = 'break',
   Continue = 'continue',
 }

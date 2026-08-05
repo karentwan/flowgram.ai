@@ -6,6 +6,7 @@
 import { INodeExecutorFactory } from '@flowgram.ai/runtime-interface';
 
 import { StartExecutor } from './start';
+import { MCPExecutor } from './mcp';
 import { LoopExecutor } from './loop';
 import { LLMExecutor } from './llm';
 import { HTTPExecutor } from './http';
@@ -15,6 +16,7 @@ import { ContinueExecutor } from './continue';
 import { ConditionExecutor } from './condition';
 import { CodeExecutor } from './code';
 import { BreakExecutor } from './break';
+import { AgentExecutor } from './agent';
 
 export const WorkflowRuntimeNodeExecutors: INodeExecutorFactory[] = [
   StartExecutor,
@@ -25,6 +27,8 @@ export const WorkflowRuntimeNodeExecutors: INodeExecutorFactory[] = [
   BlockStartExecutor,
   BlockEndExecutor,
   HTTPExecutor,
+  MCPExecutor,
+  AgentExecutor,
   CodeExecutor,
   BreakExecutor,
   ContinueExecutor,

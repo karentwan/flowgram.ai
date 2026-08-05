@@ -3,11 +3,17 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { createServer } from '@server/index';
+// Re-export the tRPC appRouter + type so downstream apps (e.g. flow-backend)
+// can merge the runtime's execution procedures into their own root router.
+export { appRouter, type AppRouter } from '@api/index';
+export { createServer } from '@server/index';
 
-async function main() {
-  const server = await createServer();
-  server.start();
+// Keep backwards-compatible direct startup when run as a standalone process
+// (e.g. `pnpm start` / `node dist/index.js`). Guarded so importing the module
+// for its exports does not start a server.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  import('@server/index').then(async ({ createServer }) => {
+    const server = await createServer();
+    server.start();
+  });
 }
-
-main();

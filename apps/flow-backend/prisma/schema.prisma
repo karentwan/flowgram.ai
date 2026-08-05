@@ -1,0 +1,44 @@
+// Flowgram Studio backend data model.
+// See apps/flow-backend/src for the server; MySQL is the datasource.
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// A studio user. Auth is a simple API key (Bearer token); the key IS the
+/// credential (no password). Seeded via `pnpm seed` (see src/scripts/seed.ts).
+model User {
+  id        String    @id @default(cuid())
+  name      String
+  /// Plain-text API key used as the Bearer token. Looked up on every request.
+  /// (For v1 we keep it plain so seed-printed keys work verbatim; hashing is a
+  /// follow-up since there's no separate login flow to mint a session.)
+  apiKey    String    @unique
+  createdAt DateTime  @default(now())
+  workflows Workflow[]
+}
+
+/// A saved workflow. `document` holds the full FlowDocumentJSON (nodes, edges,
+/// globalVariables). Secrets inside node `server.headers` are encrypted at rest
+/// (see src/lib/secrets.ts) — `document` is stored post-encryption.
+///
+/// Versioning: v1 uses single-row optimistic overwrite. `version` is bumped on
+/// each update; clients must send the current `version` to update (stale writes
+/// are rejected). A full `workflow_versions` history table is a follow-up.
+model Workflow {
+  id        String   @id @default(cuid())
+  ownerId   String?
+  name      String
+  document  Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User?    @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
+}
