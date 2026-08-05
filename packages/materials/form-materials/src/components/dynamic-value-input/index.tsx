@@ -138,7 +138,12 @@ export function DynamicValueInput({
       includeSchema={includeSchema}
       readonly={readonly}
       triggerRender={() => (
-        <IconButton disabled={readonly} size="small" icon={<IconSetting size="small" />} />
+        <IconButton
+          disabled={readonly}
+          size="small"
+          icon={<IconSetting size="small" />}
+          title="Insert variable"
+        />
       )}
     />
   );

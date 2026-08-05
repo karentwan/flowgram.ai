@@ -73,6 +73,7 @@ export function AssignRow(props: AssignRowProps) {
             size="small"
             theme="borderless"
             icon={<IconMinus />}
+            title="Remove"
             onClick={() => onDelete?.()}
           />
         </div>

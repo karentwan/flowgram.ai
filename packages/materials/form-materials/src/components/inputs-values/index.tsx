@@ -62,6 +62,7 @@ export function InputsValues({
               theme="borderless"
               icon={<IconDelete size="small" />}
               size="small"
+              title="Remove"
               onClick={() => remove(item.id)}
             />
           </div>

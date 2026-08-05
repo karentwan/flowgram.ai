@@ -10,6 +10,7 @@ import { Divider } from '@douyinfe/semi-ui';
 import { FormHeader, FormContent } from '../../form-components';
 import { AgentNodeJSON } from './types';
 import { UserId } from './components/user-id';
+import { Timeout } from './components/timeout';
 import { Session } from './components/session';
 import { Server } from './components/server';
 import { Input } from './components/input';
@@ -29,6 +30,8 @@ export const FormRender = ({ form }: FormRenderProps<AgentNodeJSON>) => (
       <Input />
       <Divider />
       <Session />
+      <Divider />
+      <Timeout />
       <Divider />
       <DisplayOutputs displayFromScope />
     </FormContent>

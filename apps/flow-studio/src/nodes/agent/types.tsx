@@ -33,5 +33,9 @@ export interface AgentNodeJSON extends FlowNodeJSON {
       auto: boolean;
       id: string;
     };
+    /** Per-call timeout in ms (→ AbortSignal.timeout). */
+    timeout: {
+      timeout: number;
+    };
   };
 }

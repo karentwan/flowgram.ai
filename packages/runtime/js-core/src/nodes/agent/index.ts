@@ -44,6 +44,7 @@ export interface AgentExecutorInputs {
   userId: string;
   sessionId: string;
   input: string;
+  timeout: number;
 }
 
 export class AgentExecutor implements INodeExecutor {
@@ -93,7 +94,7 @@ export class AgentExecutor implements INodeExecutor {
         // returned once the run completes. SSE streaming can be added later.
         stream: false,
       }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(inputs.timeout),
     });
 
     if (!response.ok) {
@@ -142,6 +143,8 @@ export class AgentExecutor implements INodeExecutor {
       userId: agentNode.data.userId,
       sessionId,
       input: inputVariable.value,
+      // Fall back to 120s when the field isn't set (older saved nodes).
+      timeout: agentNode.data.timeout?.timeout ?? 120000,
     };
     context.snapshot.update({
       inputs: JSON.parse(JSON.stringify(inputs)),

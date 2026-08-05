@@ -45,6 +45,9 @@ export const AgentNodeRegistry: FlowNodeRegistry = {
           auto: true,
           id: '',
         },
+        timeout: {
+          timeout: 120000,
+        },
         // reply: concatenated assistant text; usage: token counts from the run.
         outputs: {
           type: 'object',

@@ -55,5 +55,12 @@ interface AgentNodeData {
     auto: boolean;
     id: string;
   };
+  /**
+   * Per-call timeout in milliseconds (→ AbortSignal.timeout). Defaults to
+   * 120000 (2 min); raise it for slow agents (e.g. long LLM runs).
+   */
+  timeout: {
+    timeout: number;
+  };
 }
 export type AgentNodeSchema = WorkflowNodeSchema<FlowGramNode.Agent, AgentNodeData>;
