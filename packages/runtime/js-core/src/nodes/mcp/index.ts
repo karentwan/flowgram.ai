@@ -49,17 +49,44 @@ export class MCPExecutor implements INodeExecutor {
     const inputs = this.parseInputs(context);
     const result = await this.callTool(inputs);
 
-    // Return the full CallToolResult envelope. The node's declared `outputs`
-    // schema (default: { content, isError, structuredContent }) governs which
-    // fields downstream variables can reference. `isError` stays available for
-    // error checking; structuredContent carries the tool-specific payload.
-    return {
-      outputs: {
-        content: result.content,
-        isError: result.isError ?? false,
-        structuredContent: result.structuredContent,
-      },
+    // Some MCP servers return the payload only inside content[0].text (a
+    // JSON-serialized string) and omit structuredContent. Downstream nodes
+    // (Loop, Agent, variable refs) need a real object to read fields from, so
+    // when structuredContent is missing we try to JSON.parse it out of the
+    // first text content block. If that also fails, leave it undefined.
+    let structuredContent = result.structuredContent;
+    if (structuredContent === undefined) {
+      const firstText = result.content?.find((c) => c.type === 'text')?.text;
+      if (typeof firstText === 'string' && firstText.length > 0) {
+        try {
+          structuredContent = JSON.parse(firstText);
+        } catch {
+          // Not JSON (plain text reply) — keep structuredContent undefined.
+        }
+      }
+    }
+
+    // Flatten structuredContent's top-level keys onto the outputs top level so
+    // downstream nodes can reference them directly (e.g. MCP_1.数据列表) instead
+    // of drilling into MCP_1.structuredContent.数据列表. structuredContent is
+    // also kept for completeness. Only plain, own object keys are flattened
+    // (arrays/objects/primitives all fine); this lets Loop pick 数据列表 right
+    // from the variable tree once the outputs schema declares it.
+    const outputs: Record<string, unknown> = {
+      content: result.content,
+      isError: result.isError ?? false,
+      structuredContent,
     };
+    if (structuredContent && typeof structuredContent === 'object') {
+      for (const [key, value] of Object.entries(structuredContent)) {
+        // Don't clobber the reserved keys above.
+        if (!(key in outputs)) {
+          outputs[key] = value;
+        }
+      }
+    }
+
+    return { outputs };
   }
 
   private async callTool(inputs: MCPExecutorInputs): Promise<CallToolResult> {
