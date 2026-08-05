@@ -130,3 +130,6 @@ dist-storybook/
 
 # eslint cache for v9
 .lintcache/
+
+# ZCode agent workspace
+.zcode/
