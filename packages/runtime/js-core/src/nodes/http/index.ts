@@ -39,13 +39,31 @@ export class HTTPExecutor implements INodeExecutor {
 
     const responseBody = await response.text();
 
-    return {
-      outputs: {
-        headers: responseHeaders,
-        statusCode: response.status,
-        body: responseBody,
-      },
+    // Keep body as the raw string for backward compat, but also try to
+    // JSON.parse it and flatten the top-level keys onto outputs (same as the
+    // MCP node) so downstream nodes can reference fields directly — e.g. an
+    // API returning { data: [...] } lets Loop pick http_xxx.data. Non-JSON
+    // responses are unaffected (parsed stays undefined).
+    const outputs: Record<string, unknown> = {
+      headers: responseHeaders,
+      statusCode: response.status,
+      body: responseBody,
     };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(responseBody);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed && typeof parsed === 'object') {
+      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (!(key in outputs)) {
+          outputs[key] = value;
+        }
+      }
+    }
+
+    return { outputs };
   }
 
   private async request(inputs: HTTPExecutorInputs): Promise<Response> {
