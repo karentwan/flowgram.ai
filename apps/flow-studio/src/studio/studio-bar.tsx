@@ -23,7 +23,7 @@ const DEFAULT_NAME = 'Untitled workflow';
 
 export const StudioBar = () => {
   const document = useService(WorkflowDocument);
-  const { current, user, logout, setCurrent, save, load } = useStudio();
+  const { current, user, logout, setCurrent, save, load, markDirty } = useStudio();
 
   const [name, setName] = useState(current?.name ?? DEFAULT_NAME);
   const [saving, setSaving] = useState(false);
@@ -39,7 +39,6 @@ export const StudioBar = () => {
   }
 
   // Mark the workflow dirty whenever the document content changes (after load).
-  const { markDirty } = useStudio();
   useEffect(() => {
     const disposable = document.onContentChange(() => markDirty(true));
     return () => disposable.dispose();
@@ -93,10 +92,20 @@ export const StudioBar = () => {
   };
 
   const handleOpen = async (id: string) => {
+    // Confirm before discarding unsaved changes (same guard as New).
+    if (current?.dirty && !window.confirm('Discard unsaved changes and open another workflow?')) {
+      return;
+    }
     setError('');
     try {
       const { document: docJson } = await load(id);
+      // fromJSON merges into the existing canvas — clear first so the old
+      // nodes/edges don't stack on top of the loaded workflow.
+      document.clear();
       document.fromJSON(docJson as never);
+      // clear/fromJSON both fire onContentChange → markDirty(true); reset so
+      // a freshly loaded workflow shows as clean.
+      markDirty(false);
       setOpenList(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to open workflow');

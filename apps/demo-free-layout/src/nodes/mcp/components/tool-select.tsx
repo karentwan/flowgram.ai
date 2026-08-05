@@ -62,19 +62,24 @@ async function listTools(url: string, headers?: Record<string, string>): Promise
   if (!url) {
     return [];
   }
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      ...(headers || {}),
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'tools/list',
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        ...(headers || {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/list',
+      }),
+    });
+  } catch (networkErr) {
+    throw new Error(`Network error (CORS or unreachable): ${(networkErr as Error).message}`);
+  }
   if (!response.ok) {
     throw new Error(`MCP server responded with status ${response.status}`);
   }
@@ -157,9 +162,6 @@ export function ToolSelect() {
             loading={loading}
             placeholder={placeholder}
             optionList={optionList}
-            filter
-            // Allow manual entry as a fallback when discovery fails.
-            allowCreate
           />
         )}
       </Field>

@@ -4,7 +4,7 @@
  */
 
 import { FormMeta, FormRenderProps } from '@flowgram.ai/free-layout-editor';
-import { createInferInputsPlugin, DisplayOutputs } from '@flowgram.ai/form-materials';
+import { createInferInputsPlugin } from '@flowgram.ai/form-materials';
 import { Divider } from '@douyinfe/semi-ui';
 
 import { FormHeader, FormContent } from '../../form-components';
@@ -12,6 +12,7 @@ import { MCPNodeJSON } from './types';
 import { ToolSelect } from './components/tool-select';
 import { Timeout } from './components/timeout';
 import { Server } from './components/server';
+import { Outputs } from './components/outputs';
 import { Args } from './components/args';
 import { defaultFormMeta } from '../default-form-meta';
 
@@ -26,8 +27,7 @@ export const FormRender = ({ form }: FormRenderProps<MCPNodeJSON>) => (
       <Args />
       <Divider />
       <Timeout />
-      <Divider />
-      <DisplayOutputs displayFromScope />
+      <Outputs />
     </FormContent>
   </>
 );
