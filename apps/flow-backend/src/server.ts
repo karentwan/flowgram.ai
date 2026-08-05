@@ -7,10 +7,13 @@
  * Fastify server. Hosts the tRPC appRouter (auth + workflow CRUD + runtime
  * execution) under `/trpc`, plus a `/health` check.
  *
- * CORS allows the configured editor origin(s) so the studio SPA can call us
- * cross-origin during development; in production we expect a reverse proxy to
- * serve both under one origin.
+ * The OpenAPI plugin exposes the runtime procedures as REST endpoints under
+ * `/api` (e.g. POST /api/task/run) — the editor's server-mode runtime client
+ * calls those paths, not the tRPC ones. CORS allows the configured editor
+ * origin(s); in production we expect a reverse proxy to serve both under one
+ * origin.
  */
+import { fastifyTRPCOpenApiPlugin } from 'trpc-openapi';
 import fastify from 'fastify';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import cors from '@fastify/cors';
@@ -31,6 +34,16 @@ export async function createServer() {
     prefix: '/trpc',
     trpcOptions: { router: appRouter, createContext },
   });
+
+  // Expose runtime procedures (task/run, task/report, ...) as REST endpoints
+  // under /api so the editor's server-mode client can reach them. Cast as any
+  // to match runtime-nodejs' usage — the plugin type wants optional handlers we
+  // don't customize.
+  await server.register(fastifyTRPCOpenApiPlugin, {
+    basePath: '/api',
+    router: appRouter,
+    createContext,
+  } as any);
 
   server.get('/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
 

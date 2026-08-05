@@ -375,13 +375,16 @@ export function useEditorProps(
          * https://flowgram.ai/guide/runtime/introduction.html
          */
         createRuntimePlugin({
-          mode: 'browser', // browser mode is for demo only!
-          // mode: 'server',
-          // serverConfig: {
-          //   domain: 'localhost',
-          //   port: 4000,
-          //   protocol: 'http',
-          // },
+          // Server mode: workflow executes in flow-backend (Node.js), so MCP/
+          // Agent fetch calls go out from the server with no browser CORS
+          // limits. Browser mode ran the executors in the page, which blocked
+          // cross-origin calls to the MCP/Agent servers.
+          mode: 'server',
+          serverConfig: {
+            domain: 'localhost',
+            port: 4100,
+            protocol: 'http',
+          },
         }),
 
         /**
