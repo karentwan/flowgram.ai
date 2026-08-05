@@ -23,6 +23,32 @@ interface JsonRpcResponse<P> {
 }
 
 /**
+ * A flow-value header entry under server.headersValues. Only `constant`
+ * entries carry a literal header value in the browser; ref/template entries
+ * reference upstream variables that can only be resolved at runtime.
+ */
+interface HeaderValue {
+  type?: string;
+  content?: unknown;
+}
+
+/**
+ * Reduce headersValues (flow values) to a plain string map for the discovery
+ * request. Only constant entries are included — ref/template entries cannot
+ * be resolved in the browser (no variable store at design time).
+ */
+function headersValuesToStringMap(values?: Record<string, HeaderValue>): Record<string, string> {
+  if (!values) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value?.type === 'constant' && typeof value.content === 'string') {
+      out[key] = value.content;
+    }
+  }
+  return out;
+}
+
+/**
  * Calls the MCP server's `tools/list` JSON-RPC method to discover available
  * tools at design time. Mirrors what the runtime executor does for `tools/call`:
  * a plain `fetch` POST — no MCP SDK client.
@@ -81,14 +107,14 @@ async function listTools(url: string, headers?: Record<string, string>): Promise
 export function ToolSelect() {
   const { readonly } = useNodeRenderContext();
   const url = useWatch<string>('server.url') ?? '';
-  const headers = useWatch<Record<string, string>>('server.headers');
+  const headersValues = useWatch<Record<string, HeaderValue>>('server.headersValues');
   const [tools, setTools] = useState<MCPTool[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
   // Re-discover whenever the server URL or headers change. Serialize headers so
   // the effect dependency is stable across renders with the same content.
-  const headersKey = JSON.stringify(headers || {});
+  const headersKey = JSON.stringify(headersValues || {});
 
   useEffect(() => {
     setTools([]);
@@ -97,7 +123,9 @@ export function ToolSelect() {
       return;
     }
     setLoading(true);
-    listTools(url, headers)
+    // Only constant header values are resolvable in the browser; ref/template
+    // entries (which reference upstream variables) are skipped here.
+    listTools(url, headersValuesToStringMap(headersValues))
       .then((result) => setTools(result))
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
