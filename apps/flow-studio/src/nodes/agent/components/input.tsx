@@ -24,6 +24,7 @@ export function Input() {
             readonly={readonly}
             style={{ flexGrow: 1 }}
             placeholder="Type a message, use var by '{'"
+            value={field.value}
             onChange={(value) => field.onChange(value!)}
           />
         )}
