@@ -27,7 +27,14 @@ interface ResponsesMessageContent {
 }
 interface ResponsesOutputItem {
   type: string;
+  // message items carry content blocks with text
   content?: ResponsesMessageContent[];
+  // function_call items carry the tool name + call id
+  name?: string;
+  call_id?: string;
+  // function_call_output items carry the result text directly in `output`,
+  // linked back to the call via call_id
+  output?: string;
 }
 interface ResponsesObject {
   id?: string;
@@ -59,13 +66,31 @@ export class AgentExecutor implements INodeExecutor {
       throw new Error(`Agent call failed: ${message}`);
     }
 
-    // Concatenate every message item's text into a single reply string.
-    const reply = (response.output || [])
+    // Extract the agent's text reply. Prefer message.content text; if empty
+    // (some agent servers put everything in function_call_output), concatenate
+    // ALL non-empty function_call_output texts so no part of the reply is lost.
+    const items = response.output || [];
+
+    // Try message content first (the agent's direct text output).
+    let reply = items
       .filter((item) => item.type === 'message' && Array.isArray(item.content))
       .flatMap((item) => item.content || [])
       .map((block) => block.text || '')
       .filter((text) => text.length > 0)
-      .join('\n');
+      .join('\n\n');
+
+    // Fallback: concatenate all non-empty function_call_output texts.
+    if (!reply) {
+      reply = items
+        .filter(
+          (item) =>
+            item.type === 'function_call_output' &&
+            typeof item.output === 'string' &&
+            item.output.length > 0
+        )
+        .map((item) => item.output as string)
+        .join('\n\n');
+    }
 
     return {
       outputs: {
