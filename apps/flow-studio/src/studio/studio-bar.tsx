@@ -115,12 +115,8 @@ export const StudioBar = () => {
   return (
     <div
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
         height: 48,
-        zIndex: 1000,
+        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
@@ -214,9 +210,6 @@ export const StudioBar = () => {
       <Button size="small" type="tertiary" onClick={logout}>
         Sign out
       </Button>
-
-      {/* Spacer so the bar doesn't overlap the editor's own top toolbar */}
-      <div style={{ height: 48 }} />
     </div>
   );
 };

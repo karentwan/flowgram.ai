@@ -18,13 +18,18 @@ import { useEditorProps } from './hooks';
 const EditorInner = () => {
   const editorProps = useEditorProps(initialData, nodeRegistries);
   return (
-    <div className="doc-free-feature-overview" style={{ paddingTop: 48 }}>
+    <div
+      className="doc-free-feature-overview"
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}
+    >
       <FreeLayoutEditorProvider {...editorProps}>
         <StudioBar />
-        <div className="demo-container">
-          <DockedPanelLayer>
-            <EditorRenderer className="demo-editor" />
-          </DockedPanelLayer>
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <div className="demo-container">
+            <DockedPanelLayer>
+              <EditorRenderer className="demo-editor" />
+            </DockedPanelLayer>
+          </div>
         </div>
       </FreeLayoutEditorProvider>
     </div>
