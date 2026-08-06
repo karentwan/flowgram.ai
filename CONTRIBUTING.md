@@ -42,12 +42,13 @@ rush install
 rush build
 ```
 
-6. **Run docs or demo**
+6. **Run the app**
 
-``` bash
-rush dev:docs # docs
-rush dev:demo-fixed-layout
-rush dev:demo-free-layout
+```bash
+# frontend (apps/flow-studio)
+cd apps/flow-studio && rushx dev
+# backend (apps/flow-backend)
+cd apps/flow-backend && rushx dev
 ```
 
 After that, you can start to develop projects inside this repository.

@@ -47,23 +47,6 @@ rush e2e:test
 rush e2e:update-screenshot
 ```
 
-### Development Commands for Demos
-
-```bash
-# Run docs site with hot reload
-rush dev:docs
-
-# Run specific demo apps with hot reload
-rush dev:demo-free-layout
-rush dev:demo-fixed-layout
-rush dev:demo-fixed-layout-simple
-rush dev:demo-free-layout-simple
-rush dev:demo-nextjs
-rush dev:demo-nextjs-antd
-```
-
-These commands use `concurrently` to run `rush build:watch` for dependencies alongside the demo's dev server.
-
 ### Single Package Development
 
 To work on a single package in isolation:

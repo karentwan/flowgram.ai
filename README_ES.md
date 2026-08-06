@@ -1,91 +1,98 @@
-![Imagen](https://github.com/user-attachments/assets/4f9dfa0e-e600-4d4e-9e73-c919184f7573)
+![Image](https://github.com/user-attachments/assets/4f9dfa0e-e600-4d4e-9e73-c919184f7573)
 
 <div align="center">
 
-[![Licencia](https://img.shields.io/github/license/bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/blob/main/LICENSE) [![@flowgram.ai/editor](https://img.shields.io/npm/dm/%40flowgram.ai%2Fcore)](https://www.npmjs.com/package/@flowgram.ai/editor) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/bytedance/flowgram.ai) [![juejin](https://img.shields.io/badge/juejin-FFFFFF?logo=juejin&logoColor=%23007FFF)](https://juejin.cn/column/7479814468601315362)
-
-[![](https://trendshift.io/api/badge/repositories/13877)](https://trendshift.io/repositories/13877)
+[![License](https://img.shields.io/github/license/bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/blob/main/LICENSE) [![@flowgram.ai/editor](https://img.shields.io/npm/dm/%40flowgram.ai%2Fcore)](https://www.npmjs.com/package/@flowgram.ai/editor)
 
 </div>
 
-# FlowGram | Marco de desarrollo de flujos de trabajo
+# FlowGram｜Workflow Studio
 
 [English](README.md) | [中文](README_ZH.md) | [Español](README_ES.md) | [Русский](README_RU.md) | [Português](README_PT.md) | [Deutsch](README_DE.md) | [日本語](README_JA.md)
 
-FlowGram es un marco y conjunto de herramientas de desarrollo de flujos de trabajo componible, visual, fácil de integrar y extensible.
-Nuestro objetivo es ayudar a los desarrolladores a crear plataformas de flujo de trabajo de IA de forma **más rápida** y **sencilla**.
-FlowGram viene con un conjunto de herramientas integradas para el desarrollo de flujos de trabajo: un lienzo de flujo visual, formularios de configuración de nodos, una cadena de alcance de variables y materiales listos para usar (LLM, Condición, Editor de código, etc.). No es una plataforma de flujo de trabajo ya hecha; es el marco y el conjunto de herramientas para crear la suya.
+Un editor de flujos de trabajo visual y un backend de ejecución, construido sobre el framework [FlowGram.AI](https://flowgram.ai). Compón pipelines de IA/agentes en un lienzo de diseño libre — peticiones HTTP, llamadas LLM, código, condiciones, bucles, nodos MCP/agente — y ejecútalos en el servidor.
 
-Obtenga más información en [FlowGram.AI 🌐](https://flowgram.ai)
+El repositorio contiene dos aplicaciones:
 
-## 🎬 Demostración
-
-<https://github.com/user-attachments/assets/fee87890-ceec-4c07-b659-08afc4dedc26>
-
-Abra en [CodeSandbox 🌐](https://codesandbox.io/p/github/louisyoungx/flowgram-demo/main) o [StackBlitz 🌐](https://stackblitz.com/~/github.com/louisyoungx/flowgram-demo)
-
-En esta demostración, iteramos a través de una lista de ciudades, obtenemos el clima en tiempo real a través de HTTP, analizamos las temperaturas con un nodo de código, generamos sugerencias de atuendos con un LLM, controlamos mediante una condición, agregamos los resultados a lo largo del bucle y, finalmente, usamos un LLM asesor para elegir la ciudad más cómoda antes de enviar el resultado al nodo final.
+- **`apps/flow-studio`** — el editor del navegador (React + Rsbuild). Los flujos de trabajo creados se persisten en el backend y se ejecutan en modo servidor.
+- **`apps/flow-backend`** — un servidor tRPC + Prisma (MySQL). Persiste flujos de trabajo (con cifrado de secretos en reposo), los ejecuta a través del runtime y expone la API de ejecución que el editor invoca.
 
 ## 🚀 Inicio rápido
 
-1. Cree un nuevo proyecto de FlowGram:
+### Requisitos previos
+
+- Node.js 18+ y pnpm 10.6.5 (versión exigida por Rush)
+- Una base de datos MySQL (p. ej., un contenedor Docker local)
+
+### 1. Instalar dependencias
 
 ```sh
-npx @flowgram.ai/create-app@latest
+git clone <repo-url> && cd flowgram.ai
+npx @microsoft/rush install
 ```
 
-> Le recomendamos que elija la plantilla `Free Layout Demo ⭐️`.
-
-2. Inicie el proyecto:
+### 2. Configurar el backend
 
 ```sh
-cd demo-free-layout
-npm install
-npm start
+cd apps/flow-backend
+cp .env.example .env        # luego edita los valores (DATABASE_URL, FLOWGRAM_ENCRYPTION_KEY, ...)
 ```
 
-3. Abra [http://localhost:3000](http://localhost:3000) en su navegador.
+Genera una clave de cifrado y ejecuta la migración de la base de datos:
+
+```sh
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # -> FLOWGRAM_ENCRYPTION_KEY
+rushx db:generate           # generar el cliente de Prisma
+rushx db:migrate            # crear el esquema (MySQL)
+```
+
+### 3. Ejecutar
+
+En dos terminales:
+
+```sh
+# Terminal 1 — backend (por defecto http://localhost:4000)
+cd apps/flow-backend && rushx dev
+
+# Terminal 2 — editor de estudio (por defecto http://localhost:3000)
+cd apps/flow-studio && rushx dev
+```
+
+> El editor se comunica por defecto con `http://localhost:4100` (ver `apps/flow-studio/src/api/trpc.ts`). Para apuntarlo a tu backend, define `window.__FLOW_BACKEND_URL__` o edita esa constante; asegúrate de que `CORS_ORIGIN` en el `.env` del backend coincida con el origen del editor.
+
+Tras hacer pull, reconstruye todos los paquetes con:
+
+```sh
+rush build
+```
 
 ## ✨ Características
 
-| Característica                                                                                 | Descripción                                                                                                                                                                                            | Demostración                                                                                   |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| [Lienzo de diseño libre](https://flowgram.ai/examples/free-layout/free-feature-overview.html)  | Lienzo de diseño libre donde los nodos se pueden colocar en cualquier lugar y conectar mediante líneas de forma libre.                                                                                 | ![Demostración de diseño libre](./apps/docs/src/public/free-layout/free-layout-demo.gif)       |
-| [Lienzo de diseño fijo](https://flowgram.ai/examples/fixed-layout/fixed-feature-overview.html) | Lienzo de diseño fijo donde los nodos se pueden arrastrar a posiciones específicas, con soporte para nodos compuestos como ramas y bucles.                                                             | ![Demostración de diseño fijo](./apps/docs/src/public/fixed-layout/fixed-layout-demo.gif)      |
-| [Formulario](https://flowgram.ai/examples/node-form/basic.html)                                | El motor de formularios gestiona las operaciones CRUD de datos de nodos y proporciona capacidades de renderizado, validación, efectos secundarios, vinculación y captura de errores, simplificando el desarrollo de configuraciones de nodos. | ![Formulario](https://github.com/user-attachments/assets/13e9b4cd-e993-4d21-901c-fb6cf106de78) |
-| [Variable](https://flowgram.ai/guide/variable/basic.html)                                      | El motor de variables admite restricciones de ámbito, inspección de estructura de variables e inferencia de tipos, facilitando la gestión del flujo de datos dentro del flujo de trabajo.                                     | ![Variable](https://github.com/user-attachments/assets/442006db-25e3-4fb5-972c-7a0545638ff5)   |
+| Característica | Descripción |
+| --- | --- |
+| [Free Layout Canvas](https://flowgram.ai/examples/free-layout/free-feature-overview.html) | Lienzo de diseño libre donde los nodos se pueden colocar en cualquier posición y conectarse con líneas libres. |
+| [Fixed Layout Canvas](https://flowgram.ai/examples/fixed-layout/fixed-feature-overview.html) | Lienzo de diseño fijo con posicionamiento por arrastre y nodos compuestos (ramas, bucles). |
+| [Form](https://flowgram.ai/examples/node-form/basic.html) | Motor de formularios para la configuración de nodos: renderizado, validación, efectos, enlace y captura de errores. |
+| [Variable](https://flowgram.ai/guide/variable/basic.html) | Motor de variables con restricciones de ámbito, inspección de estructura e inferencia de tipos. |
+| Runtime de servidor | Los flujos de trabajo se ejecutan en el backend (`task/run`, `task/validate`, ...); el editor los invoca en modo servidor. |
+| Cifrado de secretos | Los secretos en las cabeceras de nodos MCP/agente se cifran en reposo y se descifran de forma transparente al leerlos. |
 
+## 📦 Estructura del proyecto
 
-## 📖 Documentación
+```
+apps/
+  flow-studio/      editor del navegador (React + Rsbuild)
+  flow-backend/     servidor tRPC + Prisma (MySQL)
+packages/           librerías del framework FlowGram (motor de canvas, motor de nodos, runtime, plugins)
+common/             herramientas de Rush y autoinstaladores
+config/             preajustes compartidos de eslint / tsconfig
+e2e/                suites de Playwright (por escenario)
+```
 
-Puede encontrar la documentación de FlowGram [en el sitio web](https://flowgram.ai).
+## 📖 Documentación del framework
 
-La documentación se divide en varias secciones:
+Esta aplicación está construida sobre el framework FlowGram.AI. La documentación del framework está en [flowgram.ai](https://flowgram.ai) (Inicio rápido, Canvas, Form, Variable, Material, Runtime, Referencia de API).
 
-- [Inicio rápido](https://flowgram.ai/guide/getting-started/introduction.html)
-- [Lienzo](https://flowgram.ai/guide/free-layout/load.html)
-- [Formulario](https://flowgram.ai/guide/form/form.html)
-- [Variable](https://flowgram.ai/guide/variable/basic.html)
-- [Material](https://flowgram.ai/materials/introduction.html)
-- [Tiempo de ejecución](https://flowgram.ai/guide/runtime/introduction.html)
-- [Guías avanzadas](https://flowgram.ai/guide/advanced/zoom-scroll.html)
-- [Referencia de la API](https://flowgram.ai/api/index.html)
-- [Dónde obtener soporte](https://flowgram.ai/guide/contact-us.html)
-- [Guía de contribución](https://flowgram.ai/guide/contributing.html)
+## License
 
-## 🙌 Colaboradores
-
-[![Colaboradores de FlowGram.AI](https://contrib.rocks/image?repo=bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/graphs/contributors)
-
-## 🌍 Adopción
-
-- [Coze Studio](https://github.com/coze-dev/coze-studio) es una herramienta de desarrollo de agentes de IA todo en uno. Coze Studio, que proporciona los últimos modelos y herramientas grandes, varios modos y marcos de desarrollo, ofrece el entorno de desarrollo de agentes de IA más conveniente, desde el desarrollo hasta la implementación.
-- [NNDeploy](https://github.com/NNDeploy/nndeploy) es una herramienta de implementación de IA multiplataforma basada en flujos de trabajo.
-- [Certimate](https://github.com/certimate-go/certimate) es una herramienta de gestión de certificados SSL de código abierto que le ayuda a solicitar e implementar automáticamente certificados SSL con un flujo de trabajo visual. Es una de las opciones de cliente ACME que se enumeran en la documentación oficial de Let's Encrypt.
-
-## 📬 Contáctenos
-
-- Problemas: [Problemas](https://github.com/bytedance/flowgram.ai/issues)
-- Lark: Escanee el código QR a continuación con [Registrar Feishu](https://www.feishu.cn/en/) para unirse a nuestro grupo de usuarios de FlowGram.
-
-<img src="./apps/docs/src/public/lark-group.png" width="200"/>
+[MIT](LICENSE)

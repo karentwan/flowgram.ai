@@ -2,90 +2,97 @@
 
 <div align="center">
 
-[![License](https://img.shields.io/github/license/bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/blob/main/LICENSE) [![@flowgram.ai/editor](https://img.shields.io/npm/dm/%40flowgram.ai%2Fcore)](https://www.npmjs.com/package/@flowgram.ai/editor) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/bytedance/flowgram.ai) [![juejin](https://img.shields.io/badge/juejin-FFFFFF?logo=juejin&logoColor=%23007FFF)](https://juejin.cn/column/7479814468601315362)
-
-[![](https://trendshift.io/api/badge/repositories/13877)](https://trendshift.io/repositories/13877)
+[![License](https://img.shields.io/github/license/bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/blob/main/LICENSE) [![@flowgram.ai/editor](https://img.shields.io/npm/dm/%40flowgram.ai%2Fcore)](https://www.npmjs.com/package/@flowgram.ai/editor)
 
 </div>
 
-# FlowGram｜Workflow development framework
+# FlowGram｜Workflow Studio
 
 [English](README.md) | [中文](README_ZH.md) | [Español](README_ES.md) | [Русский](README_RU.md) | [Português](README_PT.md) | [Deutsch](README_DE.md) | [日本語](README_JA.md)
 
-FlowGram is a composable, visual, easy-to-integrate, and extensible workflow development framework & toolkit.
-Our goal is to help developers build AI workflow platforms **faster** and **simpler**.
-FlowGram comes with a suite of built-in tools for workflow development: flow canvas, node configuration form, variable scope chain, and ready-to-use materials (LLM, Condition, Code Editor etc). It’s not a ready-made workflow platform; it’s the framework and toolkit to build yours.
+A visual workflow editor and execution backend, built on the [FlowGram.AI](https://flowgram.ai) framework. Compose AI/agent pipelines on a free-layout canvas — HTTP requests, LLM calls, code, conditions, loops, MCP/agent nodes — then run them server-side.
 
-Learn more at [FlowGram.AI 🌐](https://flowgram.ai)
+The repo contains two applications:
 
-## 🎬 Demo
-
-<https://github.com/user-attachments/assets/fee87890-ceec-4c07-b659-08afc4dedc26>
-
-Open in [CodeSandbox 🌐](https://codesandbox.io/p/github/louisyoungx/flowgram-demo/main) or [StackBlitz 🌐](https://stackblitz.com/~/github.com/louisyoungx/flowgram-demo)
-
-In this demo, we iterate through a list of cities, fetch real-time weather via HTTP, parse temperatures with a Code node, generate outfit suggestions with an LLM, gate by a Condition, aggregate results across the loop, and finally use an Advisor LLM to pick the most comfortable city before sending the result to the End node.
+- **`apps/flow-studio`** — the browser editor (React + Rsbuild). Authored workflows are persisted to the backend and executed in server mode.
+- **`apps/flow-backend`** — a tRPC + Prisma (MySQL) server. Persists workflows (with at-rest secret encryption), runs workflows through the runtime, and exposes the execution API the editor calls.
 
 ## 🚀 Quick Start
 
-1. Create a new FlowGram project:
+### Prerequisites
+
+- Node.js 18+ and pnpm 10.6.5 (enforced by Rush)
+- A MySQL database (e.g. a local Docker container)
+
+### 1. Install dependencies
 
 ```sh
-npx @flowgram.ai/create-app@latest
+git clone <repo-url> && cd flowgram.ai
+npx @microsoft/rush install
 ```
 
-> We recommend choosing the `Free Layout Demo ⭐️` template.
-
-2. Start the project:
+### 2. Configure the backend
 
 ```sh
-cd demo-free-layout
-npm install
-npm start
+cd apps/flow-backend
+cp .env.example .env        # then edit values (DATABASE_URL, FLOWGRAM_ENCRYPTION_KEY, ...)
 ```
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+Generate an encryption key and run the database migration:
+
+```sh
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # -> FLOWGRAM_ENCRYPTION_KEY
+rushx db:generate           # generate the Prisma client
+rushx db:migrate            # create the schema (MySQL)
+```
+
+### 3. Run
+
+In two terminals:
+
+```sh
+# terminal 1 — backend (default http://localhost:4000)
+cd apps/flow-backend && rushx dev
+
+# terminal 2 — studio editor (default http://localhost:3000)
+cd apps/flow-studio && rushx dev
+```
+
+> The editor talks to the backend at `http://localhost:4100` by default (see `apps/flow-studio/src/api/trpc.ts`). Point it at your backend by setting `window.__FLOW_BACKEND_URL__` or editing that constant; make sure the `CORS_ORIGIN` in the backend `.env` matches the studio origin.
+
+To rebuild all packages after pulling changes:
+
+```sh
+rush build
+```
 
 ## ✨ Features
 
-| Feature                                                                                      | Description                                                                                                                                                                                               | Demo                                                                                         |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [Free Layout Canvas](https://flowgram.ai/examples/free-layout/free-feature-overview.html)    | Free layout canvas where nodes can be placed anywhere and connected using free-form lines.                                                                                                                | ![Free Layout Demo](./apps/docs/src/public/free-layout/free-layout-demo.gif)                 |
-| [Fixed Layout Canvas](https://flowgram.ai/examples/fixed-layout/fixed-feature-overview.html) | Fixed layout canvas where nodes can be dragged to specified positions, with support for compound nodes like branches and loops.                                                                           | ![Fixed Layout Demo](./apps/docs/src/public/fixed-layout/fixed-layout-demo.gif)              |
-| [Form](https://flowgram.ai/examples/node-form/basic.html)                                    | The form engine manages the CRUD operations of node data and provides rendering, validation, side effects, linkage, and error-capturing capabilities, simplifying the development of node configurations. | ![Form](https://github.com/user-attachments/assets/13e9b4cd-e993-4d21-901c-fb6cf106de78)     |
-| [Variable](https://flowgram.ai/guide/variable/basic.html)                                    | The variable engine supports scope constraints, variable structure inspection, and type inference, making it easy to manage data flow within the workflow.                                                | ![Variable](https://github.com/user-attachments/assets/442006db-25e3-4fb5-972c-7a0545638ff5) |
+| Feature | Description |
+| --- | --- |
+| [Free Layout Canvas](https://flowgram.ai/examples/free-layout/free-feature-overview.html) | Free-layout canvas where nodes can be placed anywhere and connected with free-form lines. |
+| [Fixed Layout Canvas](https://flowgram.ai/examples/fixed-layout/fixed-feature-overview.html) | Fixed-layout canvas with drag-to-snap positioning and compound nodes (branches, loops). |
+| [Form](https://flowgram.ai/examples/node-form/basic.html) | Form engine for node config: rendering, validation, side effects, linkage, error capture. |
+| [Variable](https://flowgram.ai/guide/variable/basic.html) | Variable engine with scope constraints, structure inspection, and type inference. |
+| Server runtime | Workflows execute on the backend (`task/run`, `task/validate`, ...); the editor calls it in server mode. |
+| Secret encryption | MCP/Agent node header secrets are encrypted at rest and decrypted transparently on read. |
 
+## 📦 Project Layout
 
-## 📖 Documentation
+```
+apps/
+  flow-studio/      browser editor (React + Rsbuild)
+  flow-backend/     tRPC + Prisma server (MySQL)
+packages/           FlowGram framework libraries (canvas engine, node engine, runtime, plugins)
+common/             Rush tooling and autoinstallers
+config/             Shared eslint / tsconfig presets
+e2e/                Playwright suites (per scenario)
+```
 
-You can find the FlowGram documentation [on the website](https://flowgram.ai).
+## 📖 Framework docs
 
-The documentation is divided into several sections:
+This application is built on the FlowGram.AI framework. Framework-level documentation lives at [flowgram.ai](https://flowgram.ai) (Quick Start, Canvas, Form, Variable, Material, Runtime, API Reference).
 
-- [Quick Start](https://flowgram.ai/guide/getting-started/introduction.html)
-- [Canvas](https://flowgram.ai/guide/free-layout/load.html)
-- [Form](https://flowgram.ai/guide/form/form.html)
-- [Variable](https://flowgram.ai/guide/variable/basic.html)
-- [Material](https://flowgram.ai/materials/introduction.html)
-- [Runtime](https://flowgram.ai/guide/runtime/introduction.html)
-- [Advanced Guides](https://flowgram.ai/guide/advanced/zoom-scroll.html)
-- [API Reference](https://flowgram.ai/api/index.html)
-- [Where to get Support](https://flowgram.ai/guide/contact-us.html)
-- [Contributing Guide](https://flowgram.ai/guide/contributing.html)
+## License
 
-## 🙌 Contributors
-
-[![FlowGram.AI Contributors](https://contrib.rocks/image?repo=bytedance/flowgram.ai)](https://github.com/bytedance/flowgram.ai/graphs/contributors)
-
-## 🌍 Adoption
-
-- [Coze Studio](https://github.com/coze-dev/coze-studio) is an all-in-one AI agent development tool. Providing the latest large models and tools, various development modes and frameworks, Coze Studio offers the most convenient AI agent development environment, from development to deployment.
-- [NNDeploy](https://github.com/NNDeploy/nndeploy) is a workflow-based multi-platform ai deployment tool.
-- [Certimate](https://github.com/certimate-go/certimate)  is an open-source SSL certificate management tool that helps you automatically apply for and deploy SSL certificates with a visual workflow. It is one of the ACME client options listed in the official documentation of Let's Encrypt.
-
-## 📬 Contact us
-
-- Issues: [Issues](https://github.com/bytedance/flowgram.ai/issues)
-- Lark: Scan the QR code below with [Register Feishu](https://www.feishu.cn/en/) to join our FlowGram user group.
-
-<img src="./apps/docs/src/public/lark-group.png" width="200"/>
+[MIT](LICENSE)
