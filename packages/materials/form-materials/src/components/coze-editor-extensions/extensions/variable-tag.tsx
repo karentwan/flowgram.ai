@@ -103,7 +103,13 @@ class VariableTagWidget extends WidgetType {
 
     this.toDispose.push(
       Disposable.create(() => {
-        this.root.unmount();
+        // Defer the root unmount out of React's render/commit phase: codemirror
+        // widget destroy() runs inside React's passive-unmount effects, and
+        // synchronously unmounting a nested React root there triggers
+        // "Attempted to synchronously unmount a root while React was already
+        // rendering". A microtask runs after the current synchronous batch,
+        // avoiding the race while still cleaning up promptly.
+        queueMicrotask(() => this.root.unmount());
       })
     );
 
