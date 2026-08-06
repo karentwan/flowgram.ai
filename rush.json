@@ -430,31 +430,6 @@
       "tags": ["config"]
     },
     {
-      "packageName": "@flowgram.ai/create-app",
-      "projectFolder": "apps/create-app",
-      "versionPolicyName": "publishPolicy",
-      "tags": ["cli"]
-    },
-    {
-      "packageName": "@flowgram.ai/cli",
-      "projectFolder": "apps/cli",
-      "versionPolicyName": "publishPolicy",
-      "tags": ["cli"]
-    },
-    // 官网
-    {
-      "packageName": "@flowgram.ai/docs",
-      "projectFolder": "apps/docs",
-      "tags": ["docs"]
-    },
-    // demos
-    {
-      "packageName": "@flowgram.ai/demo-fixed-layout",
-      "projectFolder": "apps/demo-fixed-layout",
-      "tags": ["level-1", "team-flow", "demo"],
-      "versionPolicyName": "appPolicy"
-    },
-    {
       "packageName": "@flowgram.ai/utils",
       "projectFolder": "packages/common/utils",
       "versionPolicyName": "publishPolicy",
@@ -765,12 +740,6 @@
       "tags": ["level-1", "team-flow"]
     },
     {
-      "packageName": "@flowgram.ai/demo-free-layout",
-      "projectFolder": "apps/demo-free-layout",
-      "tags": ["level-1", "team-flow", "demo"],
-      "versionPolicyName": "appPolicy"
-    },
-    {
       "packageName": "@flowgram.ai/flow-studio",
       "projectFolder": "apps/flow-studio",
       "tags": ["level-1", "team-flow"],
@@ -781,46 +750,6 @@
       "projectFolder": "apps/flow-backend",
       "tags": ["level-1", "team-flow"],
       "versionPolicyName": "appPolicy"
-    },
-    {
-      "packageName": "@flowgram.ai/demo-fixed-layout-simple",
-      "projectFolder": "apps/demo-fixed-layout-simple",
-      "versionPolicyName": "appPolicy",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-free-layout-simple",
-      "projectFolder": "apps/demo-free-layout-simple",
-      "versionPolicyName": "appPolicy",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-node-form",
-      "projectFolder": "apps/demo-node-form",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-materials",
-      "projectFolder": "apps/demo-materials",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-nextjs",
-      "projectFolder": "apps/demo-nextjs",
-      "versionPolicyName": "appPolicy",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-vite",
-      "projectFolder": "apps/demo-vite",
-      "versionPolicyName": "appPolicy",
-      "tags": ["level-1", "team-flow", "demo"]
-    },
-    {
-      "packageName": "@flowgram.ai/demo-playground",
-      "projectFolder": "apps/demo-playground",
-      "versionPolicyName": "appPolicy",
-      "tags": ["level-1", "team-flow", "demo"]
     },
     {
       "packageName": "@flowgram.ai/runtime-nodejs",

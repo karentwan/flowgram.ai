@@ -10,8 +10,6 @@ const ig = require("ignore")();
 const ignorePaths = [
   '.next',
   'doc_build',
-  'apps/docs/components/free-examples',
-  'apps/docs/components/fixed-examples',
 ]
 
 
