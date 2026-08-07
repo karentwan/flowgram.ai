@@ -31,7 +31,7 @@ from ..schemas import (
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
 
 
-@router.get("/list", response_model=list[WorkflowListItem], dependencies=[Depends(require_user)])
+@router.get("/list", response_model=list[WorkflowListItem], response_model_by_alias=True, dependencies=[Depends(require_user)])
 def list_workflows(
     user: CurrentUser = Depends(require_user),
     search: str | None = Query(default=None),
@@ -45,7 +45,7 @@ def list_workflows(
     return list(db.scalars(stmt))
 
 
-@router.get("/get", response_model=WorkflowFull, dependencies=[Depends(require_user)])
+@router.get("/get", response_model=WorkflowFull, response_model_by_alias=True, dependencies=[Depends(require_user)])
 def get_workflow(
     id: str = Query(...),
     user: CurrentUser = Depends(require_user),
@@ -84,7 +84,7 @@ def create_workflow(
     return WorkflowCreateOut(id=wf.id, version=wf.version)
 
 
-@router.post("/update", response_model=WorkflowUpdateOut, dependencies=[Depends(require_user)])
+@router.post("/update", response_model=WorkflowUpdateOut, response_model_by_alias=True, dependencies=[Depends(require_user)])
 def update_workflow(
     payload: WorkflowUpdateIn,
     user: CurrentUser = Depends(require_user),

@@ -4,20 +4,20 @@
  */
 
 /**
- * tRPC client for flow-studio → flow-backend.
+ * Backend client for flow-studio → flow-backend-python.
  *
- * Uses the raw tRPC HTTP request format (no superjson transformer — the backend
- * uses plain JSON). The Bearer API key is read from localStorage and attached
- * to every request as the Authorization header.
+ * The Python backend exposes a REST surface (not tRPC): /api/auth/whoami,
+ * /api/workflow/list, etc. This module hand-rolls a thin fetch wrapper over
+ * those endpoints. The Bearer API key is read from localStorage and attached
+ * to every request.
  *
- * NOTE: we hand-roll a thin fetch wrapper rather than `createTRPCClient` so the
- * bundle stays small and we avoid importing the backend's AppRouter type (which
- * would pull Prisma etc. into the browser bundle). The procedure paths match
- * the backend router exactly: `auth.whoami`, `workflow.list`, etc.
+ * NOTE: previously this called the Node backend's tRPC procedures under /trpc.
+ * After the python-refactor migration it calls the Python backend's REST API
+ * under /api. The exported `api` surface is unchanged so callers need no edits.
  */
 
 const BACKEND_URL =
-  (typeof window !== 'undefined' && window.__FLOW_BACKEND_URL__) || 'http://localhost:4100';
+  (typeof window !== 'undefined' && window.__FLOW_BACKEND_URL__) || 'http://localhost:4001';
 export const setBackendUrl = (url: string): void => {
   if (typeof window !== 'undefined') window.__FLOW_BACKEND_URL__ = url;
 };
@@ -37,11 +37,11 @@ export const clearApiKey = (): void => {
   localStorage.removeItem(API_KEY_STORAGE);
 };
 
-/** Serialize a tRPC procedure input into the `?input=` query format. */
-function encodeInput(input: unknown): string {
-  return encodeURIComponent(JSON.stringify(input ?? {}));
-}
-
+/**
+ * REST request helper. GET serializes input as query params; POST/PUT/DELETE
+ * send it as a JSON body. The Python backend returns data directly (no tRPC
+ * envelope), so the JSON response is returned as-is.
+ */
 async function request<T>(
   path: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -53,11 +53,19 @@ async function request<T>(
     ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
   };
 
-  let url = `${BACKEND_URL}/trpc/${path}`;
+  let url = `${BACKEND_URL}${path}`;
   let body: string | undefined;
 
   if (method === 'GET') {
-    url += `?input=${encodeInput(input)}`;
+    // Serialize input object as query params (flat key=value pairs).
+    if (input && typeof input === 'object') {
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+        if (v !== undefined) params.set(k, String(v));
+      }
+      const qs = params.toString();
+      if (qs) url += `?${qs}`;
+    }
   } else {
     body = JSON.stringify(input ?? {});
   }
@@ -65,18 +73,20 @@ async function request<T>(
   const res = await fetch(url, { method, headers, body });
   const json = await res.json();
 
-  if (!res.ok || json.error) {
+  if (!res.ok) {
     const message =
-      json?.error?.message || json?.error?.data?.code || `HTTP ${res.status} ${res.statusText}`;
+      (json && (json.detail || json.message)) || `HTTP ${res.status} ${res.statusText}`;
     throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
   }
-  return json.result.data as T;
+  // Python backend returns the resource directly (FastAPI response_model).
+  // A null response (e.g. whoami when unauthenticated) is valid.
+  return json as T;
 }
 
-/** Minimal typed client surface for the procedures we use. */
+/** Minimal typed client surface — mirrors the old tRPC api shape. */
 export const api = {
   auth: {
-    whoami: () => request<{ id: string; name: string } | null>('auth.whoami', 'GET'),
+    whoami: () => request<{ id: string; name: string } | null>('/api/auth/whoami', 'GET'),
   },
   workflow: {
     list: (input?: { search?: string }) =>
@@ -88,7 +98,7 @@ export const api = {
           createdAt: string;
           updatedAt: string;
         }>
-      >('workflow.list', 'GET', input),
+      >('/api/workflow/list', 'GET', input),
     get: (id: string) =>
       request<{
         id: string;
@@ -98,16 +108,20 @@ export const api = {
         version: number;
         createdAt: string;
         updatedAt: string;
-      }>('workflow.get', 'GET', { id }),
+      }>('/api/workflow/get', 'GET', { id }),
     create: (input: { name: string; document: Record<string, unknown> }) =>
-      request<{ id: string; version: number }>('workflow.create', 'POST', input),
+      request<{ id: string; version: number }>('/api/workflow/create', 'POST', input),
     update: (input: {
       id: string;
       name?: string;
       document?: Record<string, unknown>;
       version: number;
     }) =>
-      request<{ id: string; version: number; updatedAt: string }>('workflow.update', 'POST', input),
-    delete: (id: string) => request<{ ok: boolean }>('workflow.delete', 'POST', { id }),
+      request<{ id: string; version: number; updatedAt: string }>(
+        '/api/workflow/update',
+        'POST',
+        input
+      ),
+    delete: (id: string) => request<{ ok: boolean }>('/api/workflow/delete', 'POST', { id }),
   },
 };

@@ -1,7 +1,7 @@
 {
   "name": "@flowgram.ai/flow-backend",
   "version": "0.1.0",
-  "description": "Flowgram workflow studio backend: workflow CRUD + auth + runtime execution proxy",
+  "description": "[DEPRECATED] Node/Fastify backend — superseded by apps/flow-backend-python (LangGraph). See README.md.",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",
