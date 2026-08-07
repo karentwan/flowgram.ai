@@ -54,8 +54,12 @@ class GraphBuilder:
         for e in ir.edges:
             self.edges_by_source.setdefault(e.source_node_id, []).append(e)
 
-    def build(self):
-        """Compile and return a runnable LangGraph."""
+    def build(self, checkpointer: Any = None):
+        """Compile and return a runnable LangGraph.
+
+        If checkpointer is provided, the graph persists State per step (enables
+        resume via thread_id on crash/restart).
+        """
         graph = StateGraph(FlowState)
 
         # 1. Register all top-level node functions.
@@ -69,7 +73,7 @@ class GraphBuilder:
         # 3. Wire START → first node, and any dangling outputs → END.
         self._wire_entry_exit(graph)
 
-        return graph.compile()
+        return graph.compile(checkpointer=checkpointer)
 
     def _register_node(self, graph: StateGraph, node: WorkflowNode) -> None:
         """Add a node function to the graph. Skips block-start/block-end markers."""
@@ -254,10 +258,14 @@ def _make_break_node_fn(node_id: str):
     return fn
 
 
-def build_graph(schema: dict[str, Any] | str):
-    """Parse + validate + compile a workflow schema into a runnable LangGraph."""
+def build_graph(schema: dict[str, Any] | str, checkpointer: Any = None):
+    """Parse + validate + compile a workflow schema into a runnable LangGraph.
+
+    If ``checkpointer`` is provided, the compiled graph persists every step's
+    State (enables resume-on-crash via thread_id). If None, runs in-memory only.
+    """
     ir = load_ir(schema)
     builder = GraphBuilder(ir)
-    graph = builder.build()
-    _log.info("graph built", node_count=len(ir.nodes), edge_count=len(ir.edges))
+    graph = builder.build(checkpointer=checkpointer)
+    _log.info("graph built", node_count=len(ir.nodes), edge_count=len(ir.edges), has_checkpointer=checkpointer is not None)
     return graph

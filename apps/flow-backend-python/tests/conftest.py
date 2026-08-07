@@ -22,11 +22,17 @@ TEST_KEY_B64 = base64.b64encode(b"K" * 32).decode()
 
 @pytest.fixture(autouse=True)
 def _set_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Provide a fixed encryption key for all tests."""
+    """Provide a fixed encryption key for all tests + disable the MySQL
+    checkpointer (tests use sqlite/in-memory; real checkpointer needs MySQL)."""
     monkeypatch.setenv("FLOWGRAM_ENCRYPTION_KEY", TEST_KEY_B64)
+    monkeypatch.setenv("DATABASE_URL", "")  # prevent accidental MySQL connect
     from app.core import config
 
     config.get_settings.cache_clear()
+    # Force checkpointer off so get_checkpointer() returns None instantly.
+    from app.engine import checkpointer
+
+    checkpointer.disable_checkpointer_for_tests()
 
 
 @pytest.fixture

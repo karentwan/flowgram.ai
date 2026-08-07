@@ -4,9 +4,11 @@ Holds an in-memory task map (task_id → Task). ``run`` starts a task in the
 background and returns immediately; ``result`` returns outputs once terminated;
 ``report`` returns the current state; ``cancel`` requests termination.
 
-Like Node, tasks live only in process memory (no persistence) — a restart
-drops in-flight tasks. Phase 6 (observability) will add PostgresSaver
-checkpointing for resumability.
+Resume-on-crash: when a MySQL checkpointer is configured (DATABASE_URL set +
+langgraph-checkpoint-mysql installed), each task's State is persisted per step
+keyed by task_id. ``resume(task_id)`` rebuilds the graph and continues from the
+last checkpoint after a process restart. If the DB/checkpointer is unavailable,
+runs proceed in-memory only (no resume capability).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from typing import Any
 
 from app.core.logging import get_logger
 from app.core.observability import ObservabilityRecorder, create_task_run_record
+from app.engine.checkpointer import get_checkpointer
 from app.engine.graph import build_graph
 from app.engine.state import (
     NODE_STATUS_KEY,
@@ -72,12 +75,14 @@ class TaskManager:
 
         Must be called within a running event loop (the ASGI server provides one;
         tests use pytest-asyncio). The task is scheduled as a fire-and-forget
-        background coroutine on the current loop.
+        background coroutine on the current loop. Graph construction + checkpointer
+        acquisition happen inside _execute (async) so the MySQL checkpointer can
+        be awaited.
         """
         task_id = "task_" + secrets.token_hex(12)
-        graph = build_graph(schema)
         state = new_state(task_id, inputs)
         task = Task(id=task_id, inputs=inputs, state=state)
+        task.schema = schema  # type: ignore[attr-defined]
         self.tasks[task_id] = task
 
         # Observability: open a DB session for the task's duration and register
@@ -95,7 +100,7 @@ class TaskManager:
                 "TaskManager.run() must be called within a running event loop "
                 "(the ASGI server provides one)."
             ) from e
-        task.future = loop.create_task(self._execute(task, graph, recorder, session))
+        task.future = loop.create_task(self._execute(task, recorder, session))
         _log.info("task started", task_id=task_id)
         return task_id
 
@@ -109,10 +114,20 @@ class TaskManager:
             _log.warning("db session unavailable, observability degraded", error=str(e))
             return None
 
-    async def _execute(self, task: Task, graph, recorder, session) -> None:
-        """Run the graph to completion, updating task.state + recording stats."""
+    async def _execute(self, task: Task, recorder, session) -> None:
+        """Run the graph to completion, updating task.state + recording stats.
+
+        Graph is built here (not in run()) so the MySQL checkpointer can be
+        awaited. If a checkpointer is available, the graph persists State per
+        step keyed by task_id — enabling resume-on-crash (re-invoking with the
+        same thread_id continues from the last checkpoint).
+        """
         try:
-            final_state = await graph.ainvoke(task.state)
+            checkpointer = await get_checkpointer()
+            graph = build_graph(task.schema, checkpointer=checkpointer)  # type: ignore[attr-defined]
+            # thread_id = task_id so checkpoint chains are per-task.
+            config = {"configurable": {"thread_id": task.id}} if checkpointer else None
+            final_state = await graph.ainvoke(task.state, config=config)
             if isinstance(final_state, dict):
                 task.state.update(final_state)
             if not is_terminated(task.state):
@@ -153,6 +168,41 @@ class TaskManager:
                     session.close()
                 except Exception:
                     pass
+
+    async def resume(self, task_id: str) -> str | None:
+        """Resume an interrupted/crashed task from its last checkpoint.
+
+        Rebuilds the graph with the same checkpointer + thread_id and re-invokes;
+        LangGraph picks up from the persisted checkpoint rather than restarting.
+        Returns the task_id if a checkpoint exists, else None.
+        """
+        task = self.tasks.get(task_id)
+        if task is None:
+            return None
+        checkpointer = await get_checkpointer()
+        if checkpointer is None:
+            _log.warning("cannot resume: no checkpointer available", task_id=task_id)
+            return None
+        graph = build_graph(task.schema, checkpointer=checkpointer)  # type: ignore[attr-defined]
+        loop = asyncio.get_running_loop()
+        task.future = loop.create_task(self._resume_invoke(task, graph))
+        _log.info("task resuming from checkpoint", task_id=task_id)
+        return task_id
+
+    async def _resume_invoke(self, task: Task, graph) -> None:
+        """Invoke a graph to resume from checkpoint (passes None input)."""
+        try:
+            config = {"configurable": {"thread_id": task.id}}
+            final_state = await graph.ainvoke(None, config=config)
+            if isinstance(final_state, dict):
+                task.state.update(final_state)
+            if not is_terminated(task.state):
+                set_workflow_status(task.state, "succeeded")
+            _log.info("task resumed+finished", task_id=task.id, status=get_workflow_status(task.state))
+        except Exception as e:
+            task.error = str(e)
+            set_workflow_status(task.state, "failed")
+            _log.error("task resume failed", task_id=task.id, error=str(e))
 
     def result(self, task_id: str) -> dict[str, Any] | None:
         """Return outputs if the task terminated, else None (mirrors Node result())."""
