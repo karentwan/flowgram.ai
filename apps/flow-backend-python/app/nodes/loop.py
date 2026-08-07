@@ -46,6 +46,14 @@ def make_loop_node(node: WorkflowNode, body_runner: BodyRunner | None = None) ->
 
     async def fn(state: dict[str, Any]) -> dict[str, Any]:
         loop_array = resolve_ref(loop_for_ref, state) if loop_for_ref else None
+        _log.info(
+            "loop resolve",
+            node_id=node.id,
+            loopFor_ref=loop_for_ref,
+            resolved_type=type(loop_array).__name__,
+            resolved_len=len(loop_array) if isinstance(loop_array, list) else None,
+            resolved_preview=(loop_array[:3] if isinstance(loop_array, list) else loop_array),
+        )
         if not isinstance(loop_array, list):
             loop_array = []
 

@@ -17,8 +17,25 @@ from typing import Any
 
 from app.engine.state import DATA_KEY, get_inputs
 
-# Matches {{ path }} in template strings.
-_TEMPLATE_PATTERN = re.compile(r"\{\{\s*([\w]+(?:\.[\w]+)*)\s*\}\}")
+# Matches {{ path }} in template strings. Supports non-ASCII keys (e.g. Chinese
+# field names like 服务商编号) and dot-nested paths (nodeId__field.sub).
+# `[^.{}\s]+` matches any char except `.`, braces, and whitespace — covers
+# Chinese/unicode identifiers that `\w` would miss.
+_TEMPLATE_PATTERN = re.compile(r"\{\{\s*([^.{}\s]+(?:\.[^.{}\s]+)*)\s*\}\}")
+
+
+def _locals_from_state(state: dict[str, Any], scope_id: str) -> dict[str, Any] | None:
+    """Recover loop locals from state when locals_map wasn't passed.
+
+    The loop body runner stashes locals under state["__loop_locals__"][loop_id].
+    ``scope_id`` is the ``loopId_locals`` form (e.g. ``loop_RER-F_locals``);
+    we strip the ``_locals`` suffix to get the loop_id key.
+    """
+    if not isinstance(scope_id, str) or not scope_id.endswith("_locals"):
+        return None
+    loop_id = scope_id[: -len("_locals")]
+    stash = state.get("__loop_locals__", {})
+    return stash.get(loop_id)
 
 
 def resolve_ref(value: dict[str, Any], state: dict[str, Any], locals_map: dict[str, Any] | None = None) -> Any:
@@ -32,13 +49,25 @@ def resolve_ref(value: dict[str, Any], state: dict[str, Any], locals_map: dict[s
 
     head = path[0]
 
-    # Loop-locals scope (e.g. ['loop_0_locals', 'item']).
+    # Loop-locals scope: ['loopId_locals', 'item'] or ['loopId_locals', 'item', 'sub']
+    # → locals_map['item'], then drill into ['sub'] if nested.
     if isinstance(head, str) and head.endswith("_locals"):
+        # If locals_map wasn't passed, try to recover it from state (loop body
+        # nodes call resolvers without a locals_map arg; the runner stashes
+        # locals in state keyed by loop_id).
+        if locals_map is None:
+            locals_map = _locals_from_state(state, head)
         if locals_map is None:
             return None
         if len(path) < 2:
             return None
-        return locals_map.get(path[1])
+        current: Any = locals_map.get(path[1])
+        for seg in path[2:]:
+            if isinstance(seg, str) and isinstance(current, dict):
+                current = current.get(seg)
+            else:
+                return None
+        return current
 
     # Standard node ref: ['nodeId', 'field', ...nested?]
     if len(path) >= 2 and isinstance(head, str) and isinstance(path[1], str):
@@ -48,6 +77,15 @@ def resolve_ref(value: dict[str, Any], state: dict[str, Any], locals_map: dict[s
         if current is None:
             # Fall back to inputs dict if the start node hasn't run yet.
             current = get_inputs(state).get(path[1])
+        if current is None:
+            # Debug: log unresolved refs so missing upstream outputs surface.
+            from app.core.logging import get_logger as _gl
+            _gl(__name__).warning(
+                "ref unresolved",
+                path=path,
+                field_key=field_key,
+                available_keys=list(data.keys()),
+            )
         for seg in path[2:]:
             if isinstance(seg, str) and isinstance(current, dict):
                 current = current.get(seg)
@@ -75,10 +113,23 @@ def resolve_template(value: dict[str, Any], state: dict[str, Any], locals_map: d
         parts = key.split(".")
         head_key = parts[0]
 
-        # Loop-locals form: {{loop_0_locals.item}} → locals_map['item']
-        if locals_map is not None and head_key.endswith("_locals"):
-            local_name = parts[-1] if len(parts) > 1 else parts[0]
-            return str(locals_map.get(local_name, ""))
+        # Loop-locals form: {{loopId_locals.item}} or {{loopId_locals.item.sub}}
+        # → locals_map['item'], then drill into ['sub'] if nested.
+        if head_key.endswith("_locals"):
+            # Recover locals from state if not passed (loop body nodes case).
+            lm = locals_map if locals_map is not None else _locals_from_state(state, head_key)
+            if lm is None:
+                return ""
+            if len(parts) < 2:
+                return ""
+            current: Any = lm.get(parts[1])
+            for seg in parts[2:]:
+                if isinstance(current, dict):
+                    current = current.get(seg)
+                else:
+                    current = ""
+                    break
+            return "" if current is None else str(current)
 
         # Standard data-channel field: {{nodeId__field}} or {{nodeId__field.sub}}
         current: Any = data.get(head_key)

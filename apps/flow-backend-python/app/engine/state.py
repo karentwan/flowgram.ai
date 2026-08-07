@@ -32,6 +32,8 @@ NODE_STATUS_KEY = "node_status"
 WORKFLOW_STATUS_KEY = "workflow_status"
 BREAK_KEY = "break_signal"
 DATA_KEY = "data"
+# Snapshots channel: list of {nodeID, inputs, outputs} per node execution.
+SNAPSHOTS_KEY = "snapshots"
 
 
 class FlowState(TypedDict, total=False):
@@ -47,6 +49,11 @@ class FlowState(TypedDict, total=False):
     node_status: Annotated[dict[str, Any], _merge_dict]
     workflow_status: str
     break_signal: Annotated[bool, lambda a, b: a or b]  # OR: once True, stays True
+    # Per-node execution snapshots (inputs/outputs) — consumed by the report
+    # endpoint so the editor can render results under each node. Each entry is
+    # {nodeID, inputs, outputs}. Append-merged: each node fn may push multiple
+    # (e.g. loop iterations).
+    snapshots: Annotated[list[dict[str, Any]], lambda a, b: (a or []) + (b or [])]
 
 
 def new_state(task_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -59,6 +66,7 @@ def new_state(task_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
         NODE_STATUS_KEY: {},
         WORKFLOW_STATUS_KEY: "processing",
         BREAK_KEY: False,
+        SNAPSHOTS_KEY: [],
     }
 
 

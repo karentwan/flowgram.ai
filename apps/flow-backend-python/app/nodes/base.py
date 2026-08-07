@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.core.logging import get_logger
-from app.engine.state import DATA_KEY, NODE_STATUS_KEY, TASK_ID_KEY
+from app.engine.state import DATA_KEY, NODE_STATUS_KEY, SNAPSHOTS_KEY, TASK_ID_KEY
 from app.schemas.ir import WorkflowNode
 
 # A LangGraph node function: takes state, returns a partial state update.
@@ -62,6 +62,11 @@ def wrap_with_status(node_id: str, node_type: str, fn: NodeFn) -> NodeFn:
         result[NODE_STATUS_KEY] = {node_id: "succeeded"}
         usage = _extract_usage(result)
         outputs = _extract_node_outputs(result)
+        # Push a snapshot for this node so the editor can render results under
+        # it. Outputs are stripped of the `{nodeId}__` prefix so they show as
+        # field names (matches Node's snapshot.outputs shape).
+        stripped = {k.split("__", 1)[1] if k.startswith(f"{node_id}__") else k: v for k, v in outputs.items()}
+        result[SNAPSHOTS_KEY] = [{"nodeID": node_id, "inputs": None, "outputs": stripped}]
         if recorder is not None:
             recorder.end_node(node_id, node_type, 0, "succeeded", outputs, usage)
         _log.info("node end", node_id=node_id)

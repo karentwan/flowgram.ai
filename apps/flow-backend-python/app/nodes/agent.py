@@ -20,6 +20,10 @@ from app.engine.values import resolve_flow_value, resolve_inputs_values
 from app.nodes.base import NodeFn, outputs_for, wrap_with_status
 from app.schemas.ir import WorkflowNode
 
+from app.core.logging import get_logger
+
+_log = get_logger(__name__)
+
 
 def make_agent_node(node: WorkflowNode) -> NodeFn:
     """Build an async node fn that calls an agent's /chat/process endpoint."""
@@ -61,7 +65,23 @@ def make_agent_node(node: WorkflowNode) -> NodeFn:
             raise ValueError("Agent sessionId is required")
 
         timeout_ms = int(timeout_cfg.get("timeout", 120000) or 120000)
+        _log.info(
+            "agent call",
+            node_id=node.id,
+            url=url,
+            agent_id=agent_id,
+            user_id=user_id,
+            session_id=session_id,
+            input=str(input_text)[:200],
+        )
         response = await _call_agent(url, headers, agent_id, user_id, session_id, str(input_text), timeout_ms)
+        _log.info(
+            "agent response",
+            node_id=node.id,
+            status=response.get("status"),
+            output_items=len(response.get("output") or []),
+            usage=response.get("usage"),
+        )
 
         status = response.get("status")
         if status != "completed":

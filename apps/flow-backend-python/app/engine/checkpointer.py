@@ -60,6 +60,14 @@ async def get_checkpointer() -> Any | None:
         _log.warning("checkpointer disabled: DATABASE_URL not set")
         return None
 
+    # Escape hatch: set FLOWGRAM_CHECKPOINTER=0 to disable (e.g. when the MySQL
+    # user lacks CREATE permission or aiomysql connectivity is unstable).
+    import os
+
+    if os.environ.get("FLOWGRAM_CHECKPOINTER", "1") == "0":
+        _log.info("checkpointer disabled by FLOWGRAM_CHECKPOINTER=0")
+        return None
+
     try:
         from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
     except ImportError:

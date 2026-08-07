@@ -108,13 +108,14 @@ class TestPassthrough:
 
 class TestErrorHandling:
     def test_missing_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FLOWGRAM_ENCRYPTION_KEY", raising=False)
-        from app.core import config
-
-        config.get_settings.cache_clear()
+        # Force the crypto layer to see an empty key. We patch the loader so the
+        # .env file (present when running the live server) doesn't resupply it.
+        monkeypatch.setattr(
+            "app.utils.crypto._load_key",
+            lambda: (_ for _ in ()).throw(crypto.CryptoConfigError("FLOWGRAM_ENCRYPTION_KEY is not set")),
+        )
         with pytest.raises(crypto.CryptoConfigError, match="not set"):
             encrypt("x")
-        config.get_settings.cache_clear()  # reset for subsequent tests
 
     def test_wrong_key_raises_invalid_tag(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Decryption with a different key fails (auth tag mismatch)."""

@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.engine.loader import load_ir
 from app.engine.state import FlowState, set_workflow_status
 from app.nodes.agent import make_agent_node
+from app.nodes.base import NodeFn
 from app.nodes.code import make_code_node
 from app.nodes.condition import make_condition_router
 from app.nodes.control import make_end_node, make_start_node
@@ -155,10 +156,17 @@ class GraphBuilder:
         return END
 
     def _build_loop_body_runner(self, loop_node: WorkflowNode) -> BodyRunner | None:
-        """Build a callable that runs one loop iteration's subgraph.
+        """Build a callable that runs one loop iteration's body nodes.
 
-        Phase 3 builds the body subgraph from ``loop_node.blocks`` + nested edges,
-        then wraps it so each invocation resolves loopOutputs for that iteration.
+        Body nodes are executed directly (NOT via a compiled subgraph) so that:
+          1. locals_map (item/index) threads through to every body node's
+             template/ref resolution (a compiled subgraph would lose this —
+             locals aren't expressible in LangGraph state).
+          2. snapshots produced by body nodes merge back into the parent state
+             (a subgraph returns its own state, orphaning snapshots).
+
+        Execution order is derived from nested edges (topological), with
+        block-start as entry and block-end as exit markers.
         """
         blocks = loop_node.blocks or []
         if not blocks:
@@ -166,75 +174,94 @@ class GraphBuilder:
 
         nested_edges = loop_node.edges or []
         body_nodes_by_id = {b.id: b for b in blocks if b.type not in ("block-start", "block-end")}
+        block_marker_ids = {b.id for b in blocks if b.type in ("block-start", "block-end")}
 
-        # Build a subgraph for the loop body.
-        body_graph_builder = StateGraph(FlowState)
+        # Build body node fns (reuse the same factories as top-level nodes).
+        body_fns: dict[str, NodeFn] = {}
         for b in body_nodes_by_id.values():
-            self._register_node_into(body_graph_builder, b)
-        # Wire nested edges.
-        edges_by_src: dict[str, list[WorkflowEdge]] = {}
+            body_fns[b.id] = self._make_node_fn(b)
+
+        # Compute execution order: BFS from block-start's successor.
+        start_ids = [
+            e.target_node_id
+            for e in nested_edges
+            if e.source_node_id in {x for x in block_marker_ids if any(b.id == x and b.type == "block-start" for b in blocks)}
+            and e.target_node_id in body_nodes_by_id
+        ]
+        if not start_ids:
+            start_ids = [next(iter(body_nodes_by_id))] if body_nodes_by_id else []
+        # Adjacency among body nodes (skip edges touching markers).
+        adj: dict[str, list[str]] = {nid: [] for nid in body_nodes_by_id}
         for e in nested_edges:
-            edges_by_src.setdefault(e.source_node_id, []).append(e)
-        for src, outs in edges_by_src.items():
-            for e in outs:
-                if e.target_node_id in body_nodes_by_id or e.target_node_id in {b.id for b in blocks}:
-                    if e.target_node_id in body_nodes_by_id:
-                        body_graph_builder.add_edge(src, e.target_node_id)
-        # Entry: block-start → first body node.
-        first_body = next((b for b in blocks if b.type == "block-start"), None)
-        first_exec = next(
-            (b for b in blocks if b.type not in ("block-start", "block-end")), None
-        )
-        if first_body and first_exec:
-            body_graph_builder.add_edge(START, first_exec.id)
-        elif first_exec:
-            body_graph_builder.add_edge(START, first_exec.id)
-        # Exit: body nodes with no outgoing → END.
-        nested_sources = {e.source_node_id for e in nested_edges}
-        for b in body_nodes_by_id.values():
-            if b.id not in nested_sources:
-                body_graph_builder.add_edge(b.id, END)
+            if e.source_node_id in body_nodes_by_id and e.target_node_id in body_nodes_by_id:
+                adj[e.source_node_id].append(e.target_node_id)
+        # Topo order via BFS from starts.
+        ordered: list[str] = []
+        seen: set[str] = set()
+        queue = list(start_ids)
+        while queue:
+            nid = queue.pop(0)
+            if nid in seen or nid not in body_nodes_by_id:
+                continue
+            seen.add(nid)
+            ordered.append(nid)
+            queue.extend(adj.get(nid, []))
+        # Append any unreached body nodes (defensive — shouldn't happen).
+        for nid in body_nodes_by_id:
+            if nid not in seen:
+                ordered.append(nid)
 
-        compiled = body_graph_builder.compile()
         loop_outputs_decl = loop_node.data.get("loopOutputs") or {}
 
         async def runner(state: dict[str, Any], item: Any, index: int, loop_id: str) -> dict[str, Any]:
-            # Run the body subgraph with the parent state as input. Loop-local
-            # variables (item/index) are passed via locals_map to template/ref
-            # resolution, not via the state.
-            result_state = await compiled.ainvoke(dict(state))
-            # Collect declared loopOutputs by resolving their refs against the
-            # post-execution state (body node outputs are in the data channel).
+            # locals_map threads into every body node's value resolution.
+            locals_map = {"item": item, "index": index}
+            # Run body nodes in order against the parent state, merging each
+            # node's partial update (outputs + snapshots) back into state.
+            for nid in ordered:
+                fn = body_fns.get(nid)
+                if fn is None:
+                    continue
+                # The node fn reads state + (for templates) locals via the
+                # module-level resolver; locals are passed by stashing them in
+                # state under a per-loop key the resolver reads.
+                _set_loop_locals(state, loop_id, locals_map)
+                update = await fn(state)
+                if isinstance(update, dict):
+                    _merge_update(state, update)
+            # Collect declared loopOutputs from the now-updated state.
             from app.engine.values import resolve_ref
 
-            locals_map = {"item": item, "index": index}
             collected: dict[str, Any] = {}
             for name, ref in loop_outputs_decl.items():
-                collected[name] = resolve_ref(ref, result_state, locals_map)
+                collected[name] = resolve_ref(ref, state, locals_map)
             return collected
 
         return runner
 
-    def _register_node_into(self, graph: StateGraph, node: WorkflowNode) -> None:
-        """Register a node into an arbitrary graph (used for loop body subgraphs)."""
+    def _make_node_fn(self, node: WorkflowNode) -> NodeFn:
+        """Build a node fn from an IR node (same logic as _register_node_into
+        but returns the fn instead of adding it to a graph). Used by the loop
+        body runner to execute body nodes directly."""
         ntype = node.type
         if ntype in ("block-start", "block-end", "comment", "group", "root"):
-            return
+            async def _noop(state): return {}
+            return _noop  # type: ignore[return-value]
         if ntype == "break":
-            graph.add_node(node.id, _make_break_node_fn(node.id))
-            return
+            return _make_break_node_fn(node.id)
         if ntype == "condition":
-            graph.add_node(node.id, _passthrough_node(node.id))
-            return
+            return _passthrough_node(node.id)
         if ntype == "loop":
-            # Nested loop (loop inside loop): recursive.
             body_runner = self._build_loop_body_runner(node)
-            graph.add_node(node.id, make_loop_node(node, body_runner))
-            return
+            return make_loop_node(node, body_runner)
         factory = _NODE_FACTORIES.get(ntype)
         if factory is None:
             raise ValueError(f"No executor for node type '{ntype}' ({node.id})")
-        graph.add_node(node.id, factory(node))
+        return factory(node)
+
+    def _register_node_into(self, graph: StateGraph, node: WorkflowNode) -> None:
+        """Register a node into an arbitrary graph (used for loop body subgraphs)."""
+        graph.add_node(node.id, self._make_node_fn(node))
 
 
 def _flatten_nodes(nodes: list[WorkflowNode]) -> list[WorkflowNode]:
@@ -256,6 +283,48 @@ def _make_break_node_fn(node_id: str):
     async def fn(state: dict[str, Any]) -> dict[str, Any]:
         return {BREAK_KEY: True}
     return fn
+
+
+# Loop-locals stash: body nodes read locals from state (since their fns are
+# called without a locals_map arg). Keyed by loop_id under __loop_locals__.
+_LOOP_LOCALS_KEY = "__loop_locals__"
+
+
+def _set_loop_locals(state: dict[str, Any], loop_id: str, locals_map: dict[str, Any]) -> None:
+    state.setdefault(_LOOP_LOCALS_KEY, {})[loop_id] = locals_map
+
+
+def get_loop_locals(state: dict[str, Any], loop_id: str) -> dict[str, Any] | None:
+    """Public: value resolvers call this to fetch the active loop's locals.
+
+    The resolver matches the loop_id from a ref/template path like
+    ``loop_RER-F_locals.item`` by checking which stashed loop_id the scope
+    prefix belongs to.
+    """
+    return state.get(_LOOP_LOCALS_KEY, {}).get(loop_id)
+
+
+def _merge_update(state: dict[str, Any], update: dict[str, Any]) -> None:
+    """Merge a node fn's partial update into state (mirrors the FlowState
+    reducers: data/outputs/node_status/snapshots merge; scalars overwrite)."""
+    from app.engine.state import (
+        DATA_KEY,
+        NODE_STATUS_KEY,
+        OUTPUTS_KEY,
+        SNAPSHOTS_KEY,
+    )
+
+    for k, v in update.items():
+        if k == DATA_KEY and isinstance(v, dict):
+            state.setdefault(DATA_KEY, {}).update(v)
+        elif k == NODE_STATUS_KEY and isinstance(v, dict):
+            state.setdefault(NODE_STATUS_KEY, {}).update(v)
+        elif k == OUTPUTS_KEY and isinstance(v, dict):
+            state.setdefault(OUTPUTS_KEY, {}).update(v)
+        elif k == SNAPSHOTS_KEY and isinstance(v, list):
+            state.setdefault(SNAPSHOTS_KEY, []).extend(v)
+        else:
+            state[k] = v
 
 
 def build_graph(schema: dict[str, Any] | str, checkpointer: Any = None):

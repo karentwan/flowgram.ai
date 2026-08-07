@@ -56,12 +56,16 @@ class Task:
         return get_outputs(self.state)
 
     def cancel(self) -> bool:
+        # If the task already reached a terminal state, don't overwrite it
+        # (avoids a late cancel clobbering a succeeded/failed result).
+        if self.terminated:
+            return True
         if self.future is not None and not self.future.done():
             self.future.cancel()
             set_workflow_status(self.state, "canceled")
             return True
         set_workflow_status(self.state, "canceled")
-        return False
+        return True
 
 
 class TaskManager:
@@ -221,15 +225,34 @@ class TaskManager:
         node_status = task.state.get(NODE_STATUS_KEY, {})
         # Pull observability stats from the DB if available.
         stats = self._query_stats(task_id)
+        wf_status = get_workflow_status(task.state)
+        # Group snapshots by nodeID so the editor can render each node's
+        # results under it. Mirrors Node's NodeReport.snapshots structure.
+        from app.engine.state import SNAPSHOTS_KEY
+
+        all_snapshots = task.state.get(SNAPSHOTS_KEY, [])
+        snaps_by_node: dict[str, list[dict[str, Any]]] = {}
+        for snap in all_snapshots:
+            snaps_by_node.setdefault(snap.get("nodeID", ""), []).append(snap)
+
+        # Build reports: every node with a status gets a snapshots array (empty
+        # if none) — the editor reads nodeReport.snapshots.length unconditionally.
+        reports: dict[str, Any] = {}
+        for node_id, status in node_status.items():
+            reports[node_id] = {
+                "id": node_id,
+                "status": status,
+                "snapshots": snaps_by_node.get(node_id, []),
+            }
         return {
             "id": task.id,
             "inputs": task.inputs,
             "outputs": task.outputs,
-            "workflowStatus": {"status": get_workflow_status(task.state)},
-            "reports": {
-                node_id: {"id": node_id, "status": status}
-                for node_id, status in node_status.items()
-            },
+            # workflowStatus MUST include `terminated` (boolean) — the editor's
+            # runtime plugin polls report and stops on workflowStatus.terminated
+            # being true. Mirrors Node's StatusData {status, terminated}.
+            "workflowStatus": {"status": wf_status, "terminated": wf_status in {"succeeded", "failed", "canceled"}},
+            "reports": reports,
             "messages": [],
             "stats": stats,
         }

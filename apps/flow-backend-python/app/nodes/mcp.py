@@ -25,6 +25,10 @@ from app.engine.values import resolve_flow_value, resolve_inputs_values
 from app.nodes.base import NodeFn, outputs_for, wrap_with_status
 from app.schemas.ir import WorkflowNode
 
+from app.core.logging import get_logger
+
+_log = get_logger(__name__)
+
 
 def make_mcp_node(node: WorkflowNode) -> NodeFn:
     """Build an async node fn that calls an MCP tool via JSON-RPC."""
@@ -52,10 +56,20 @@ def make_mcp_node(node: WorkflowNode) -> NodeFn:
         retry_times = int(timeout_cfg.get("retryTimes", 0) or 0)
         timeout_ms = int(timeout_cfg.get("timeout", 30000) or 30000)
 
+        _log.info(
+            "mcp call",
+            node_id=node.id,
+            url=url,
+            tool=tool_name,
+            args=args,
+        )
         result = await _call_tool_with_retry(
             url, headers, tool_name, args, retry_times, timeout_ms
         )
+        _log.info("mcp raw result", node_id=node.id, result=result)
         outputs = _build_outputs(result)
+        outputs = _apply_outputs_defaults(node, outputs)
+        _log.info("mcp outputs", node_id=node.id, output_keys=list(outputs.keys()))
         return outputs_for(node, outputs)
 
     return wrap_with_status(node.id, node.type, fn)
@@ -168,3 +182,33 @@ async def _sleep(seconds: float) -> None:
     import asyncio
 
     await asyncio.sleep(seconds)
+
+
+def _apply_outputs_defaults(node: WorkflowNode, outputs: dict[str, Any]) -> dict[str, Any]:
+    """Fill in declared-but-missing output fields with their schema default.
+
+    The canvas declares output fields (with optional defaults) on each node.
+    When the upstream service (MCP/HTTP) omits a declared field, downstream
+    refs to it would resolve to None (e.g. loopFor on a missing field). To
+    match canvas expectations, we backfill from the JSON Schema default:
+      - "[]" string → empty list
+      - "{}" string → empty dict
+      - other defaults → parsed/passthrough.
+    """
+    declared = (((node.data.get("outputs") or {}).get("properties")) or {})
+    for field_name, schema in declared.items():
+        if field_name in outputs and outputs[field_name] is not None:
+            continue
+        default = schema.get("default") if isinstance(schema, dict) else None
+        if default is None:
+            continue
+        # Coerce string defaults like "[]" / "{}" to actual objects.
+        if isinstance(default, str):
+            try:
+                import json as _json
+
+                default = _json.loads(default)
+            except (json.JSONDecodeError, ValueError):
+                pass  # keep as string
+        outputs[field_name] = default
+    return outputs
