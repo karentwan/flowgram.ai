@@ -4,6 +4,7 @@
  */
 
 import { nanoid } from 'nanoid';
+import { LoopMode } from '@flowgram.ai/runtime-interface';
 import {
   WorkflowNodeEntity,
   PositionSchema,
@@ -83,6 +84,8 @@ export const LoopNodeRegistry: FlowNodeRegistry = {
       type: WorkflowNodeType.Loop,
       data: {
         title: `Loop_${++index}`,
+        // Default to serial mode (backward compatible — see LoopMode doc).
+        mode: LoopMode.Serial,
       },
       blocks: [
         {
