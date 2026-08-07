@@ -1,0 +1,50 @@
+"""Code node executor — runs user Python via exec() (dev only).
+
+Grill decision (contract §2): code nodes run Python only. The Node backend
+ran JS in a QuickJS sandbox; the Python backend redefines this as Python exec.
+
+SECURITY: this is the dev implementation — it uses bare ``exec`` with NO
+sandboxing. Production must add process/container isolation (grill marked this
+as a follow-up). The canvas still surfaces a code editor; Python syntax is
+expected.
+
+The user code must define ``def main(params):`` returning a dict of outputs.
+Inputs come from ``inputsValues`` resolved to ``params``.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.engine.values import resolve_inputs_values
+from app.nodes.base import NodeFn, outputs_for, wrap_with_status
+from app.schemas.ir import WorkflowNode
+
+
+def make_code_node(node: WorkflowNode) -> NodeFn:
+    """Build a node fn that execs user Python defining ``main(params)``."""
+    code = node.data.get("code") or ""
+    inputs_values = node.data.get("inputsValues") or {}
+
+    async def fn(state: dict[str, Any]) -> dict[str, Any]:
+        params = resolve_inputs_values(inputs_values, state)
+        # Execute user code in a fresh namespace; expect a main(params) function.
+        namespace: dict[str, Any] = {}
+        try:
+            exec(compile(code, f"<node {node.id}>", "exec"), namespace)  # noqa: S102
+        except Exception as e:
+            raise RuntimeError(f"Code node {node.id} failed to compile: {e}") from e
+        main_fn = namespace.get("main")
+        if not callable(main_fn):
+            raise RuntimeError(
+                f"Code node {node.id} must define a `def main(params):` function"
+            )
+        try:
+            result = main_fn(params)
+        except Exception as e:
+            raise RuntimeError(f"Code node {node.id} main() raised: {e}") from e
+        if not isinstance(result, dict):
+            result = {"result": result}
+        return outputs_for(node, result)
+
+    return wrap_with_status(node.id, fn)

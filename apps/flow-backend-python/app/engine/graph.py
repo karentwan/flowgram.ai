@@ -17,11 +17,14 @@ from langgraph.graph import END, START, StateGraph
 from app.core.logging import get_logger
 from app.engine.loader import load_ir
 from app.engine.state import FlowState, set_workflow_status
+from app.nodes.agent import make_agent_node
+from app.nodes.code import make_code_node
 from app.nodes.condition import make_condition_router
 from app.nodes.control import make_end_node, make_start_node
 from app.nodes.http import make_http_node
 from app.nodes.llm import make_llm_node
 from app.nodes.loop import BodyRunner, make_loop_node
+from app.nodes.mcp import make_mcp_node
 from app.schemas.ir import WorkflowEdge, WorkflowIR, WorkflowNode
 
 _log = get_logger(__name__)
@@ -32,6 +35,9 @@ _NODE_FACTORIES = {
     "end": make_end_node,
     "llm": make_llm_node,
     "http": make_http_node,
+    "mcp": make_mcp_node,
+    "agent": make_agent_node,
+    "code": make_code_node,
 }
 
 
