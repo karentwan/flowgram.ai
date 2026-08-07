@@ -58,7 +58,7 @@ def make_mcp_node(node: WorkflowNode) -> NodeFn:
         outputs = _build_outputs(result)
         return outputs_for(node, outputs)
 
-    return wrap_with_status(node.id, fn)
+    return wrap_with_status(node.id, node.type, fn)
 
 
 async def _call_tool_with_retry(

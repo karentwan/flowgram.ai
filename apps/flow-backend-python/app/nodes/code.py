@@ -47,4 +47,4 @@ def make_code_node(node: WorkflowNode) -> NodeFn:
             result = {"result": result}
         return outputs_for(node, result)
 
-    return wrap_with_status(node.id, fn)
+    return wrap_with_status(node.id, node.type, fn)

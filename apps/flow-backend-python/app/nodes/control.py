@@ -27,7 +27,7 @@ def make_start_node(node: WorkflowNode) -> NodeFn:
         values = {field: inputs.get(field) for field in declared}
         return outputs_for(node, values)
 
-    return wrap_with_status(node_id, fn)
+    return wrap_with_status(node_id, "start", fn)
 
 
 def make_end_node(node: WorkflowNode) -> NodeFn:
@@ -38,4 +38,4 @@ def make_end_node(node: WorkflowNode) -> NodeFn:
         resolved = resolve_inputs_values(inputs_values, state)
         return {OUTPUTS_KEY: resolved}
 
-    return wrap_with_status(node.id, fn)
+    return wrap_with_status(node.id, "end", fn)

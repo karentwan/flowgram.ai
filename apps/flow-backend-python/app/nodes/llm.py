@@ -54,4 +54,4 @@ def make_llm_node(node: WorkflowNode) -> NodeFn:
             content = str(content)
         return outputs_for(node, {"result": content})
 
-    return wrap_with_status(node.id, fn)
+    return wrap_with_status(node.id, node.type, fn)

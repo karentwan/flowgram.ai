@@ -71,7 +71,7 @@ def make_agent_node(node: WorkflowNode) -> NodeFn:
         reply = _extract_reply(response)
         return outputs_for(node, {"reply": reply, "usage": response.get("usage")})
 
-    return wrap_with_status(node.id, fn)
+    return wrap_with_status(node.id, node.type, fn)
 
 
 async def _call_agent(
