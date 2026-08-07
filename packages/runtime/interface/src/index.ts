@@ -8,3 +8,4 @@ export * from './schema';
 export * from './node';
 export * from './runtime';
 export * from './client';
+export * from './langgraph-ir';
