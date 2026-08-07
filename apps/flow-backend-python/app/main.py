@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import auth as auth_router
+from app.api.routers import task as task_router
 from app.api.routers import workflow as workflow_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
@@ -67,9 +68,10 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
 
-    # Routers — workflow CRUD (protected) + auth (public).
+    # Routers — workflow CRUD (protected) + auth (public) + task execution (public v1).
     app.include_router(workflow_router.router)
     app.include_router(auth_router.router)
+    app.include_router(task_router.router)
 
     return app
 
