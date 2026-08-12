@@ -128,10 +128,31 @@ class TaskManager:
         """
         try:
             checkpointer = await get_checkpointer()
+            _log.info(
+                "checkpointer acquired",
+                task_id=task.id,
+                mode="mysql" if checkpointer is not None else "memory",
+            )
             graph = build_graph(task.schema, checkpointer=checkpointer)  # type: ignore[attr-defined]
             # thread_id = task_id so checkpoint chains are per-task.
             config = {"configurable": {"thread_id": task.id}} if checkpointer else None
-            final_state = await graph.ainvoke(task.state, config=config)
+            _log.info(
+                "graph invoke start",
+                task_id=task.id,
+                thread_id=task.id,
+                has_config=config is not None,
+            )
+            try:
+                final_state = await graph.ainvoke(task.state, config=config)
+            except Exception as e:
+                _log.error(
+                    "graph invoke failed",
+                    task_id=task.id,
+                    error=str(e),
+                    exc_info=True,
+                )
+                raise
+            _log.info("graph invoke done", task_id=task.id)
             if isinstance(final_state, dict):
                 task.state.update(final_state)
             if not is_terminated(task.state):
@@ -164,7 +185,13 @@ class TaskManager:
                 total_usage=None,
                 error=str(e),
             )
-            _log.error("task failed", task_id=task.id, error=str(e))
+            _log.error(
+                "task failed",
+                task_id=task.id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
         finally:
             unregister_recorder(task.id)
             if session is not None:
@@ -187,6 +214,7 @@ class TaskManager:
         if checkpointer is None:
             _log.warning("cannot resume: no checkpointer available", task_id=task_id)
             return None
+        _log.info("resume: checkpointer acquired", task_id=task_id, mode="mysql")
         graph = build_graph(task.schema, checkpointer=checkpointer)  # type: ignore[attr-defined]
         loop = asyncio.get_running_loop()
         task.future = loop.create_task(self._resume_invoke(task, graph))
@@ -206,7 +234,13 @@ class TaskManager:
         except Exception as e:
             task.error = str(e)
             set_workflow_status(task.state, "failed")
-            _log.error("task resume failed", task_id=task.id, error=str(e))
+            _log.error(
+                "task resume failed",
+                task_id=task.id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
 
     def result(self, task_id: str) -> dict[str, Any] | None:
         """Return outputs if the task terminated, else None (mirrors Node result())."""
