@@ -119,7 +119,10 @@ class TestObservabilityRecording:
                     "type": "code",
                     "meta": {"position": {"x": 100, "y": 0}},
                     # Missing main() → raises at runtime.
-                    "data": {"code": "x = 1", "inputsValues": {}},
+                    "data": {
+                        "script": {"language": "python", "content": "x = 1"},
+                        "inputsValues": {},
+                    },
                 },
             ],
             "edges": [{"sourceNodeID": "start_0", "targetNodeID": "code_0"}],

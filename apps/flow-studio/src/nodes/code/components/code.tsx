@@ -4,9 +4,11 @@
  */
 
 import { Field } from '@flowgram.ai/free-layout-editor';
-import { TypeScriptCodeEditor } from '@flowgram.ai/form-materials';
-import { Divider } from '@douyinfe/semi-ui';
+import { PythonCodeEditor, TypeScriptCodeEditor } from '@flowgram.ai/form-materials';
+import { Select } from '@douyinfe/semi-ui';
 
+import { CodeLanguage, CodeScript } from '../types';
+import { DEFAULT_JS_CODE, DEFAULT_PYTHON_CODE } from '../constants';
 import { useIsSidebar, useNodeRenderContext } from '../../../hooks';
 
 export function Code() {
@@ -18,17 +20,54 @@ export function Code() {
   }
 
   return (
-    <>
-      <Divider />
-      <Field<string> name="script.content">
-        {({ field }) => (
-          <TypeScriptCodeEditor
-            value={field.value}
-            onChange={(value) => field.onChange(value)}
-            readonly={readonly}
-          />
-        )}
-      </Field>
-    </>
+    <Field<CodeScript> name="script">
+      {({ field }) => {
+        const { language = 'javascript', content } = field.value || {};
+        const switchLanguage = (next: CodeLanguage) => {
+          if (next === language) {
+            return;
+          }
+          // Replace the content only when it is untouched (empty or a template).
+          const isTemplate =
+            !content?.trim() || content === DEFAULT_JS_CODE || content === DEFAULT_PYTHON_CODE;
+          field.onChange({
+            language: next,
+            content: isTemplate
+              ? next === 'python'
+                ? DEFAULT_PYTHON_CODE
+                : DEFAULT_JS_CODE
+              : content,
+          });
+        };
+
+        return (
+          <>
+            <Select
+              value={language}
+              onChange={(value) => switchLanguage(value as CodeLanguage)}
+              disabled={readonly}
+              style={{ width: '100%', marginBottom: 8 }}
+              optionList={[
+                { value: 'javascript', label: 'JavaScript' },
+                { value: 'python', label: 'Python' },
+              ]}
+            />
+            {language === 'python' ? (
+              <PythonCodeEditor
+                value={content}
+                onChange={(value) => field.onChange({ language, content: value })}
+                readonly={readonly}
+              />
+            ) : (
+              <TypeScriptCodeEditor
+                value={content}
+                onChange={(value) => field.onChange({ language, content: value })}
+                readonly={readonly}
+              />
+            )}
+          </>
+        );
+      }}
+    </Field>
   );
 }

@@ -16,7 +16,7 @@ import {
 export interface CodeExecutorInputs {
   params: Record<string, any>;
   script: {
-    language: 'javascript';
+    language: 'javascript' | 'python';
     content: string;
   };
 }
@@ -28,6 +28,12 @@ export class CodeExecutor implements INodeExecutor {
     const inputs = this.parseInputs(context);
     if (inputs.script.language === 'javascript') {
       return this.javascript(inputs);
+    }
+    if (inputs.script.language === 'python') {
+      throw new Error(
+        'Code node uses Python, which is not supported by the JS runtime (QuickJS). ' +
+          'Run the workflow on the Python backend instead.'
+      );
     }
     throw new Error(`Unsupported code language "${inputs.script.language}"`);
   }

@@ -8,8 +8,11 @@ sandboxing. Production must add process/container isolation (grill marked this
 as a follow-up). The canvas still surfaces a code editor; Python syntax is
 expected.
 
-The user code must define ``def main(params):`` returning a dict of outputs.
-Inputs come from ``inputsValues`` resolved to ``params``.
+The node payload is ``data.script`` (``{ language, content }``). The user code
+must define ``def main(params):`` returning a dict of outputs; inputs come from
+``inputsValues`` resolved to ``params``. ``language: python`` runs as-is; any
+other language raises a clear error because the Python backend has no JS
+runtime.
 """
 
 from __future__ import annotations
@@ -20,14 +23,36 @@ from app.engine.values import resolve_inputs_values
 from app.nodes.base import NodeFn, outputs_for, wrap_with_status
 from app.schemas.ir import WorkflowNode
 
+PYTHON_LANGUAGE = "python"
+
+
+def _resolve_code(node: WorkflowNode) -> tuple[str, str]:
+    """Return ``(code, language)`` from ``data.script``."""
+    script = node.data.get("script")
+    if isinstance(script, dict):
+        language = str(script.get("language") or PYTHON_LANGUAGE)
+        content = script.get("content")
+        if isinstance(content, str) and content.strip():
+            return content, language
+        return "", language
+
+    return "", PYTHON_LANGUAGE
+
 
 def make_code_node(node: WorkflowNode) -> NodeFn:
     """Build a node fn that execs user Python defining ``main(params)``."""
-    code = node.data.get("code") or ""
+    code, language = _resolve_code(node)
     inputs_values = node.data.get("inputsValues") or {}
 
     async def fn(state: dict[str, Any]) -> dict[str, Any]:
         params = resolve_inputs_values(inputs_values, state)
+        if language != PYTHON_LANGUAGE:
+            raise RuntimeError(
+                f"Code node {node.id} uses language '{language}', which the Python backend "
+                "cannot execute (no JS runtime). Rewrite the node as Python "
+                "(`def main(params):` returning a dict), or run the workflow on the Node "
+                "backend (QuickJS) to execute JavaScript."
+            )
         # Execute user code in a fresh namespace; expect a main(params) function.
         namespace: dict[str, Any] = {}
         try:

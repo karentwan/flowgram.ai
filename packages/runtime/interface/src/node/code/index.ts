@@ -14,7 +14,7 @@ interface CodeNodeData {
   inputs: IJsonSchema<'object'>;
   outputs: IJsonSchema<'object'>;
   script: {
-    language: 'javascript';
+    language: 'javascript' | 'python';
     content: string;
   };
 }

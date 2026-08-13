@@ -16,6 +16,10 @@ from app.nodes.code import make_code_node
 from app.schemas.ir import WorkflowNode
 
 
+def script_payload(content: str, language: str = "python") -> dict:
+    return {"script": {"language": language, "content": content}}
+
+
 class TestCodeNode:
     @pytest.mark.asyncio
     async def test_runs_user_python_main(self) -> None:
@@ -24,7 +28,7 @@ class TestCodeNode:
             type="code",
             meta=None,
             data={
-                "code": "def main(params):\n    return {'doubled': params['n'] * 2}",
+                **script_payload("def main(params):\n    return {'doubled': params['n'] * 2}"),
                 "inputsValues": {"n": {"type": "constant", "content": 21}},
             },
         )
@@ -39,7 +43,7 @@ class TestCodeNode:
             id="code_0",
             type="code",
             meta=None,
-            data={"code": "x = 1", "inputsValues": {}},
+            data={**script_payload("x = 1"), "inputsValues": {}},
         )
         fn = make_code_node(node)
         with pytest.raises(RuntimeError, match="must define.*main"):
@@ -51,11 +55,57 @@ class TestCodeNode:
             id="code_0",
             type="code",
             meta=None,
-            data={"code": "def main(params):\n    return 99", "inputsValues": {}},
+            data={**script_payload("def main(params):\n    return 99"), "inputsValues": {}},
         )
         fn = make_code_node(node)
         result = await fn(new_state("t", {}))
         assert result["data"]["code_0__result"] == 99
+
+    @pytest.mark.asyncio
+    async def test_javascript_script_raises_clear_error(self) -> None:
+        node = WorkflowNode(
+            id="code_0",
+            type="code",
+            meta=None,
+            data={
+                **script_payload(
+                    "async function main({ params }) { return { ok: true }; }",
+                    language="javascript",
+                ),
+                "inputsValues": {},
+            },
+        )
+        fn = make_code_node(node)
+        with pytest.raises(RuntimeError, match="javascript.*Python backend"):
+            await fn(new_state("t", {}))
+
+    @pytest.mark.asyncio
+    async def test_blank_script_content_honors_language(self) -> None:
+        """Blank script.content still raises per the declared language."""
+        node = WorkflowNode(
+            id="code_0",
+            type="code",
+            meta=None,
+            data={
+                **script_payload("   ", language="javascript"),
+                "inputsValues": {},
+            },
+        )
+        fn = make_code_node(node)
+        with pytest.raises(RuntimeError, match="javascript.*Python backend"):
+            await fn(new_state("t", {}))
+
+    @pytest.mark.asyncio
+    async def test_empty_payload_still_raises_missing_main(self) -> None:
+        node = WorkflowNode(
+            id="code_0",
+            type="code",
+            meta=None,
+            data={"inputsValues": {}},
+        )
+        fn = make_code_node(node)
+        with pytest.raises(RuntimeError, match="must define.*main"):
+            await fn(new_state("t", {}))
 
 
 class TestGraphWithCode:
@@ -80,7 +130,9 @@ class TestGraphWithCode:
                     "type": "code",
                     "meta": {"position": {"x": 100, "y": 0}},
                     "data": {
-                        "code": "def main(params):\n    return {'doubled': params['n'] * 2}",
+                        **script_payload(
+                            "def main(params):\n    return {'doubled': params['n'] * 2}"
+                        ),
                         "inputsValues": {
                             "n": {"type": "ref", "content": ["start_0", "n"]}
                         },
