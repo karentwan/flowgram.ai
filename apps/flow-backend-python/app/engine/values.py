@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from app.engine.state import DATA_KEY, get_inputs
+from app.schemas.ir import STATE_FIELD_SEPARATOR
 
 # Matches {{ path }} in template strings. Supports non-ASCII keys (e.g. Chinese
 # field names like 服务商编号) and dot-nested paths (nodeId__field.sub).
@@ -131,9 +132,22 @@ def resolve_template(value: dict[str, Any], state: dict[str, Any], locals_map: d
                     break
             return "" if current is None else str(current)
 
-        # Standard data-channel field: {{nodeId__field}} or {{nodeId__field.sub}}
+        # Standard data-channel field. Accepted forms:
+        #   {{nodeId__field}}          flat state key (contract §3)
+        #   {{nodeId__field.sub}}      flat key + nested tail
+        #   {{nodeId.field}}           canvas-native dot form (the editor's
+        #                              getTemplateKeyPaths splits on '.') —
+        #                              translated to the flat key on resolve.
+        #   {{nodeId.field.sub}}       dot form + nested tail
         current: Any = data.get(head_key)
-        for seg in parts[1:]:
+        tail: list[str]
+        if current is None and len(parts) >= 2:
+            flat = f"{head_key}{STATE_FIELD_SEPARATOR}{parts[1]}"
+            current = data.get(flat)
+            tail = parts[2:]
+        else:
+            tail = parts[1:]
+        for seg in tail:
             if isinstance(current, dict):
                 current = current.get(seg)
             else:
