@@ -67,4 +67,4 @@ def make_http_node(node: WorkflowNode) -> NodeFn:
             outputs["body"] = payload
         return outputs_for(node, outputs)
 
-    return wrap_with_status(node.id, node.type, fn)
+    return wrap_with_status(node, fn)

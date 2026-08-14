@@ -16,7 +16,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.core.logging import get_logger
 from app.engine.loader import load_ir
-from app.engine.state import FlowState, set_workflow_status
+from app.engine.state import FlowState, merge_update, set_workflow_status
 from app.nodes.agent import make_agent_node
 from app.nodes.base import NodeFn
 from app.nodes.code import make_code_node
@@ -228,7 +228,7 @@ class GraphBuilder:
                 _set_loop_locals(state, loop_id, locals_map)
                 update = await fn(state)
                 if isinstance(update, dict):
-                    _merge_update(state, update)
+                    merge_update(state, update)
             # Collect declared loopOutputs from the now-updated state.
             from app.engine.values import resolve_ref
 
@@ -302,29 +302,6 @@ def get_loop_locals(state: dict[str, Any], loop_id: str) -> dict[str, Any] | Non
     prefix belongs to.
     """
     return state.get(_LOOP_LOCALS_KEY, {}).get(loop_id)
-
-
-def _merge_update(state: dict[str, Any], update: dict[str, Any]) -> None:
-    """Merge a node fn's partial update into state (mirrors the FlowState
-    reducers: data/outputs/node_status/snapshots merge; scalars overwrite)."""
-    from app.engine.state import (
-        DATA_KEY,
-        NODE_STATUS_KEY,
-        OUTPUTS_KEY,
-        SNAPSHOTS_KEY,
-    )
-
-    for k, v in update.items():
-        if k == DATA_KEY and isinstance(v, dict):
-            state.setdefault(DATA_KEY, {}).update(v)
-        elif k == NODE_STATUS_KEY and isinstance(v, dict):
-            state.setdefault(NODE_STATUS_KEY, {}).update(v)
-        elif k == OUTPUTS_KEY and isinstance(v, dict):
-            state.setdefault(OUTPUTS_KEY, {}).update(v)
-        elif k == SNAPSHOTS_KEY and isinstance(v, list):
-            state.setdefault(SNAPSHOTS_KEY, []).extend(v)
-        else:
-            state[k] = v
 
 
 def build_graph(schema: dict[str, Any] | str, checkpointer: Any = None):

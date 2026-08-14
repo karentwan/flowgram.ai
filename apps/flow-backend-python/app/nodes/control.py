@@ -18,7 +18,6 @@ from app.schemas.ir import WorkflowNode
 
 def make_start_node(node: WorkflowNode) -> NodeFn:
     """start node: seed declared outputs from run inputs."""
-    node_id = node.id
     declared = (((node.data.get("outputs") or {}).get("properties")) or {}).keys()
 
     async def fn(state: dict[str, Any]) -> dict[str, Any]:
@@ -27,7 +26,7 @@ def make_start_node(node: WorkflowNode) -> NodeFn:
         values = {field: inputs.get(field) for field in declared}
         return outputs_for(node, values)
 
-    return wrap_with_status(node_id, "start", fn)
+    return wrap_with_status(node, fn)
 
 
 def make_end_node(node: WorkflowNode) -> NodeFn:
@@ -38,4 +37,4 @@ def make_end_node(node: WorkflowNode) -> NodeFn:
         resolved = resolve_inputs_values(inputs_values, state)
         return {OUTPUTS_KEY: resolved}
 
-    return wrap_with_status(node.id, "end", fn)
+    return wrap_with_status(node, fn)

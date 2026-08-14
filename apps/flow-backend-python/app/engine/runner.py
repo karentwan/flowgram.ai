@@ -20,10 +20,13 @@ from typing import Any
 
 from app.core.logging import get_logger
 from app.core.observability import ObservabilityRecorder, create_task_run_record
+from app.engine import live_state
 from app.engine.checkpointer import get_checkpointer
 from app.engine.graph import build_graph
 from app.engine.state import (
+    MESSAGES_KEY,
     NODE_STATUS_KEY,
+    NODE_TIMES_KEY,
     OUTPUTS_KEY,
     WORKFLOW_STATUS_KEY,
     get_outputs,
@@ -168,7 +171,9 @@ class TaskManager:
                 state_snapshot=dict(task.state),
                 total_usage={},
             )
+            self._absorb_live_state(task, include_state=False)
         except asyncio.CancelledError:
+            self._absorb_live_state(task, include_state=True)
             set_workflow_status(task.state, "canceled")
             recorder.finish_task(
                 status="canceled", outputs=None, state_snapshot=None, total_usage=None
@@ -177,11 +182,17 @@ class TaskManager:
             raise
         except Exception as e:
             task.error = str(e)
+            # Node-level failures already recorded an error message in the node
+            # wrapper; if the run died outside a node (e.g. graph build), record
+            # a workflow-level error so the editor still has something to show.
+            if not live_state.has_node_error(task.id):
+                live_state.add_message(task.id, str(e))
+            self._absorb_live_state(task, include_state=True)
             set_workflow_status(task.state, "failed")
             recorder.finish_task(
                 status="failed",
                 outputs=None,
-                state_snapshot=None,
+                state_snapshot=dict(task.state),
                 total_usage=None,
                 error=str(e),
             )
@@ -193,12 +204,27 @@ class TaskManager:
                 exc_info=True,
             )
         finally:
+            live_state.clear(task.id)
             unregister_recorder(task.id)
             if session is not None:
                 try:
                     session.close()
                 except Exception:
                     pass
+
+    def _absorb_live_state(self, task: Task, include_state: bool) -> None:
+        """Fold the per-task live mirror into task.state so report() always has
+        per-node detail. On failure LangGraph loses the partial state, so the
+        mirrored state (node statuses + snapshots + outputs) must be restored;
+        on success the final state is authoritative — only timings/messages
+        come from the mirror."""
+        live = live_state.take(task.id)
+        if live is None:
+            return
+        if include_state:
+            task.state.update(live["state"])
+        task.state[NODE_TIMES_KEY] = live["node_times"]
+        task.state[MESSAGES_KEY] = live["messages"]
 
     async def resume(self, task_id: str) -> str | None:
         """Resume an interrupted/crashed task from its last checkpoint.
@@ -230,9 +256,13 @@ class TaskManager:
                 task.state.update(final_state)
             if not is_terminated(task.state):
                 set_workflow_status(task.state, "succeeded")
+            self._absorb_live_state(task, include_state=False)
             _log.info("task resumed+finished", task_id=task.id, status=get_workflow_status(task.state))
         except Exception as e:
             task.error = str(e)
+            if not live_state.has_node_error(task.id):
+                live_state.add_message(task.id, str(e))
+            self._absorb_live_state(task, include_state=True)
             set_workflow_status(task.state, "failed")
             _log.error(
                 "task resume failed",
@@ -241,6 +271,8 @@ class TaskManager:
                 error_type=type(e).__name__,
                 exc_info=True,
             )
+        finally:
+            live_state.clear(task.id)
 
     def result(self, task_id: str) -> dict[str, Any] | None:
         """Return outputs if the task terminated, else None (mirrors Node result())."""
@@ -257,6 +289,7 @@ class TaskManager:
         if task is None:
             return None
         node_status = task.state.get(NODE_STATUS_KEY, {})
+        node_times = task.state.get(NODE_TIMES_KEY, {}) or {}
         # Pull observability stats from the DB if available.
         stats = self._query_stats(task_id)
         wf_status = get_workflow_status(task.state)
@@ -271,11 +304,16 @@ class TaskManager:
 
         # Build reports: every node with a status gets a snapshots array (empty
         # if none) — the editor reads nodeReport.snapshots.length unconditionally.
+        # startTime/timeCost mirror Node's StatusData so the node status bar can
+        # render its timing tag (and failed nodes surface their error snapshot).
         reports: dict[str, Any] = {}
         for node_id, status in node_status.items():
+            times = node_times.get(node_id, {}) or {}
             reports[node_id] = {
                 "id": node_id,
                 "status": status,
+                "startTime": int(times.get("start_time", 0) or 0),
+                "timeCost": int(times.get("time_cost", 0) or 0),
                 "snapshots": snaps_by_node.get(node_id, []),
             }
         return {
@@ -287,7 +325,11 @@ class TaskManager:
             # being true. Mirrors Node's StatusData {status, terminated}.
             "workflowStatus": {"status": wf_status, "terminated": wf_status in {"succeeded", "failed", "canceled"}},
             "reports": reports,
-            "messages": [],
+            # WorkflowMessages keyed by type (mirrors Node's messageCenter.export()).
+            # The editor reads messages.error to show failures (node errors and
+            # workflow-level errors).
+            "messages": task.state.get(MESSAGES_KEY)
+            or {"log": [], "info": [], "debug": [], "error": [], "warning": []},
             "stats": stats,
         }
 

@@ -73,7 +73,7 @@ def make_loop_node(node: WorkflowNode, body_runner: BodyRunner | None = None) ->
 
         return outputs_for(node, {name: vals for name, vals in aggregated.items()})
 
-    return wrap_with_status(node.id, node.type, fn)
+    return wrap_with_status(node, fn)
 
 
 async def _run_serial(

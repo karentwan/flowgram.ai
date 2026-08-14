@@ -34,6 +34,11 @@ BREAK_KEY = "break_signal"
 DATA_KEY = "data"
 # Snapshots channel: list of {nodeID, inputs, outputs} per node execution.
 SNAPSHOTS_KEY = "snapshots"
+# Post-execution metadata folded into task.state by the runner (NOT LangGraph
+# channels — node fns never return these): per-node timing for report
+# startTime/timeCost and workflow messages (mirrors Node's messageCenter).
+NODE_TIMES_KEY = "node_times"
+MESSAGES_KEY = "messages"
 
 
 class FlowState(TypedDict, total=False):
@@ -98,3 +103,15 @@ def set_node_status(state: dict[str, Any], node_id: str, status: str) -> None:
 def get_data(state: dict[str, Any]) -> dict[str, Any]:
     """Return the node-outputs dict ({nodeId__field: value})."""
     return state.get(DATA_KEY, {})
+
+
+def merge_update(state: dict[str, Any], update: dict[str, Any]) -> None:
+    """Merge a node fn's partial update into a state dict (mirrors the FlowState
+    reducers: data/outputs/node_status/snapshots merge; scalars overwrite)."""
+    for k, v in update.items():
+        if k in (DATA_KEY, NODE_STATUS_KEY, OUTPUTS_KEY) and isinstance(v, dict):
+            state.setdefault(k, {}).update(v)
+        elif k == SNAPSHOTS_KEY and isinstance(v, list):
+            state.setdefault(SNAPSHOTS_KEY, []).extend(v)
+        else:
+            state[k] = v
